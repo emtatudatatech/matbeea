@@ -1,0 +1,18 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model FxDailyPrice {
+  id           String   @id @default(cuid())
+  currencyPair String
+  date         DateTime @db.Date
+  closingPrice Float
+
+  @@unique([currencyPair, date])
+  @@index([currencyPair, date])
+}
