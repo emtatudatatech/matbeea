@@ -41,7 +41,9 @@ npm run dev
 
 ## Netlify Deployment 
 
-This application relies on aggressive edge caching capabilities and uses Netlify-specific Scheduled Event bindings for the daily `yahoo-finance2` node cron:
+This application relies on aggressive edge caching capabilities and strictly adheres to the **Netlify V2 Scheduled Functions** specification:
+- The `sync-fx-data.ts` cron job utilizes natively typed Web `Request` and `Response` objects.
+- Security and timing are centrally codified in `netlify.toml` via the `[functions."sync-fx-data"]` directive mapping to a `@daily` UTC invocation schedule.
 
 ```bash
 # Deploys out of box safely via
