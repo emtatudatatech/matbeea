@@ -30,12 +30,13 @@ export default async (req: Request) => {
           period2: endDate,
           interval: '1d' as const
         };
-        const results = (await yahooFinance.historical(pair, historicalOptions)) as any[];
+        const chartResult = await yahooFinance.chart(pair, historicalOptions);
+        const results = chartResult.quotes || [];
         
         // Forward fill logic for missing days can be handled later or during grouping.
         // For now, let's just insert all Yahoo Finance dates which omits weekends.
         for (const dataPoint of results) {
-          if (dataPoint.close) {
+          if (dataPoint.close !== null && dataPoint.close !== undefined) {
              await prisma.fxDailyPrice.upsert({
                where: {
                  currencyPair_date: {
