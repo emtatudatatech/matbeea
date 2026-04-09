@@ -1,7 +1,7 @@
 "use client";
 
 import Image from 'next/image';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // The 27 Major Global Currencies + USD Base mapped to flags and map coordinates
 const CURRENCY_DICTIONARY: Record<string, { flag: string, top: string, left: string, name: string }> = {
@@ -60,6 +60,27 @@ const CURRENCY_DICTIONARY: Record<string, { flag: string, top: string, left: str
 export default function Home() {
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [dbStatus, setDbStatus] = useState('Loading...');
+  
+  // Map Interactive Controls
+  const [mapZoom, setMapZoom] = useState(1);
+  const [mapPanX, setMapPanX] = useState(50); // Center is 50%
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const mapEl = mapContainerRef.current;
+    if (!mapEl) return;
+    
+    // Native wheel event allows us to aggressively cancel out browser-level zooming (passive: false)
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault(); // Stop entire page from scaling
+        setMapZoom(z => Math.max(0.5, Math.min(5, z - e.deltaY * 0.01)));
+      }
+    };
+    
+    mapEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => mapEl.removeEventListener('wheel', handleWheel);
+  }, []);
   
   // Dynamic mocked generation so we always view 27 plots visually regardless of DB pipeline delay
   const generateMockData = (base: string) => {
@@ -153,11 +174,24 @@ export default function Home() {
             <div className="text-xs text-gray-400 max-w-xs text-right">Azimuthal Equidistant Projection. Shows all 27 required markets.</div>
           </div>
           
-          <div className="w-full relative bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center p-8 aspect-video min-h-[500px]">
+          <div ref={mapContainerRef} className="w-full relative bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center aspect-video min-h-[500px]">
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-[#0a0a0a] to-[#0a0a0a] opacity-80"></div>
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
             
-            <div className="relative w-full h-full">
+            {/* The Scalable/Pannable Inner Map Layer */}
+            <div 
+              className="relative w-full h-full transition-transform duration-100 ease-out"
+              style={{
+                 transform: `scale(${mapZoom}) translateX(${(50 - mapPanX)}%)`,
+                 transformOrigin: 'center'
+              }}
+            >
+              <img 
+                src="/world.svg" 
+                alt="World Map Silhouette" 
+                className="absolute inset-0 w-full h-full object-fill opacity-[0.08] filter invert pointer-events-none" 
+              />
+              
               {/* Loop over our full 27 set */}
               {Object.keys(CURRENCY_DICTIONARY).map((curcode) => {
                  const info = CURRENCY_DICTIONARY[curcode];
@@ -189,6 +223,23 @@ export default function Home() {
                  );
               })}
             </div>
+          </div>
+
+          {/* Map Interaction Controls */}
+          <div className="mt-6 flex flex-col sm:flex-row gap-6 items-center bg-black/40 p-4 rounded-xl border border-gray-800">
+             <div className="flex-1 w-full flex items-center gap-4">
+                 <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest whitespace-nowrap">Horizontal Pan</label>
+                 <input 
+                    type="range" min="0" max="100" 
+                    value={mapPanX} onChange={(e) => setMapPanX(Number(e.target.value))} 
+                    className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-spotify-neonGreen" 
+                 />
+             </div>
+             <div className="w-full sm:w-1/3 flex items-center gap-4">
+                 <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-tight">Pinch<br/>Zoom</label>
+                 <div className="text-spotify-neonGreen font-mono font-bold w-12 text-right">{Math.round(mapZoom * 100)}%</div>
+                 <button onClick={() => {setMapZoom(1); setMapPanX(50);}} className="text-[10px] bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 outline-none rounded-md uppercase tracking-wider font-bold transition-colors">Reset</button>
+             </div>
           </div>
         </section>
         
