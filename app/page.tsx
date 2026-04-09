@@ -1,88 +1,78 @@
 "use client";
 
 import Image from 'next/image';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
 
-// The 27 Major Global Currencies + USD Base mapped to flags and map coordinates
-const CURRENCY_DICTIONARY: Record<string, { flag: string, top: string, left: string, name: string }> = {
+// TopoJSON definition for the D3 Map implementation
+const geoUrl = "https://unpkg.com/world-atlas@2.0.2/countries-110m.json";
+
+// The 39 Major Global Currencies + USD Base mapped to EXACT Longitude/Latitude coordinates
+const CURRENCY_DICTIONARY: Record<string, { flag: string, coordinates: [number, number], name: string }> = {
   // Africa
-  ZAR: { flag: 'za', top: '75%', left: '55%', name: 'South Africa' },
-  NGN: { flag: 'ng', top: '55%', left: '48%', name: 'Nigeria' },
-  EGP: { flag: 'eg', top: '42%', left: '55%', name: 'Egypt' },
-  KES: { flag: 'ke', top: '58%', left: '58%', name: 'Kenya' },
-  ZMW: { flag: 'zm', top: '65%', left: '54%', name: 'Zambia' },
-  MAD: { flag: 'ma', top: '40%', left: '45%', name: 'Morocco' },
+  ZAR: { flag: 'za', coordinates: [24, -29], name: 'South Africa' },
+  NGN: { flag: 'ng', coordinates: [8, 9], name: 'Nigeria' },
+  EGP: { flag: 'eg', coordinates: [30, 26], name: 'Egypt' },
+  KES: { flag: 'ke', coordinates: [38, 1], name: 'Kenya' },
+  ZMW: { flag: 'zm', coordinates: [28, -13], name: 'Zambia' },
+  MAD: { flag: 'ma', coordinates: [-7, 31], name: 'Morocco' },
   
   // Asia
-  JPY: { flag: 'jp', top: '35%', left: '85%', name: 'Japan' },
-  CNY: { flag: 'cn', top: '40%', left: '78%', name: 'China' },
-  INR: { flag: 'in', top: '50%', left: '70%', name: 'India' },
-  HKD: { flag: 'hk', top: '48%', left: '81%', name: 'Hong Kong' },
-  KRW: { flag: 'kr', top: '38%', left: '83%', name: 'South Korea' },
+  JPY: { flag: 'jp', coordinates: [138, 36], name: 'Japan' },
+  CNY: { flag: 'cn', coordinates: [104, 35], name: 'China' },
+  INR: { flag: 'in', coordinates: [78, 20], name: 'India' },
+  HKD: { flag: 'hk', coordinates: [114, 22], name: 'Hong Kong' },
+  KRW: { flag: 'kr', coordinates: [127, 35], name: 'South Korea' },
   
   // Europe
-  EUR: { flag: 'eu', top: '35%', left: '50%', name: 'Eurozone' },
-  GBP: { flag: 'gb', top: '30%', left: '46%', name: 'Britain' },
-  CHF: { flag: 'ch', top: '37%', left: '49%', name: 'Switzerland' },
-  SEK: { flag: 'se', top: '22%', left: '52%', name: 'Sweden' },
-  RUB: { flag: 'ru', top: '25%', left: '65%', name: 'Russia' },
-  NOK: { flag: 'no', top: '22%', left: '50%', name: 'Norway' },
+  EUR: { flag: 'eu', coordinates: [10, 51], name: 'Eurozone' },
+  GBP: { flag: 'gb', coordinates: [-3, 55], name: 'Britain' },
+  CHF: { flag: 'ch', coordinates: [8, 46], name: 'Switzerland' },
+  SEK: { flag: 'se', coordinates: [15, 60], name: 'Sweden' },
+  RUB: { flag: 'ru', coordinates: [90, 60], name: 'Russia' },
+  NOK: { flag: 'no', coordinates: [8, 60], name: 'Norway' },
   
   // North/Central/Caribbean America
-  USD: { flag: 'us', top: '35%', left: '25%', name: 'United States' },
-  CAD: { flag: 'ca', top: '25%', left: '20%', name: 'Canada' },
-  MXN: { flag: 'mx', top: '45%', left: '22%', name: 'Mexico' },
-  GTQ: { flag: 'gt', top: '48%', left: '23%', name: 'Guatemala' },
-  CRC: { flag: 'cr', top: '51%', left: '24%', name: 'Costa Rica' },
-  PAB: { flag: 'pa', top: '53%', left: '25%', name: 'Panama' },
-  HNL: { flag: 'hn', top: '50%', left: '24%', name: 'Honduras' },
-  JMD: { flag: 'jm', top: '47%', left: '28%', name: 'Jamaica' },
-  DOP: { flag: 'do', top: '48%', left: '30%', name: 'Dom. Republic' },
-  TTD: { flag: 'tt', top: '52%', left: '32%', name: 'Trinidad/Tobago' },
-  XCD: { flag: 'lc', top: '50%', left: '33%', name: 'East Caribbean' },
-  BSD: { flag: 'bs', top: '43%', left: '28%', name: 'Bahamas' },
+  USD: { flag: 'us', coordinates: [-95, 37], name: 'United States' },
+  CAD: { flag: 'ca', coordinates: [-106, 56], name: 'Canada' },
+  MXN: { flag: 'mx', coordinates: [-102, 23], name: 'Mexico' },
+  GTQ: { flag: 'gt', coordinates: [-90, 15], name: 'Guatemala' },
+  CRC: { flag: 'cr', coordinates: [-83, 9], name: 'Costa Rica' },
+  PAB: { flag: 'pa', coordinates: [-80, 8], name: 'Panama' },
+  HNL: { flag: 'hn', coordinates: [-86, 15], name: 'Honduras' },
+  JMD: { flag: 'jm', coordinates: [-77, 18], name: 'Jamaica' },
+  DOP: { flag: 'do', coordinates: [-70, 18], name: 'Dom. Republic' },
+  TTD: { flag: 'tt', coordinates: [-61, 10], name: 'Trinidad/Tobago' },
+  XCD: { flag: 'lc', coordinates: [-61, 17], name: 'East Caribbean' },
+  BSD: { flag: 'bs', coordinates: [-77, 25], name: 'Bahamas' },
   
   // South America
-  BRL: { flag: 'br', top: '65%', left: '35%', name: 'Brazil' },
-  ARS: { flag: 'ar', top: '80%', left: '32%', name: 'Argentina' },
-  CLP: { flag: 'cl', top: '78%', left: '29%', name: 'Chile' },
-  COP: { flag: 'co', top: '55%', left: '30%', name: 'Colombia' },
-  PEN: { flag: 'pe', top: '62%', left: '28%', name: 'Peru' },
+  BRL: { flag: 'br', coordinates: [-51, -14], name: 'Brazil' },
+  ARS: { flag: 'ar', coordinates: [-63, -38], name: 'Argentina' },
+  CLP: { flag: 'cl', coordinates: [-71, -35], name: 'Chile' },
+  COP: { flag: 'co', coordinates: [-74, 4], name: 'Colombia' },
+  PEN: { flag: 'pe', coordinates: [-75, -9], name: 'Peru' },
   
   // Oceania
-  AUD: { flag: 'au', top: '75%', left: '85%', name: 'Australia' },
-  NZD: { flag: 'nz', top: '82%', left: '90%', name: 'New Zealand' },
-  FJD: { flag: 'fj', top: '70%', left: '92%', name: 'Fiji' },
-  PGK: { flag: 'pg', top: '65%', left: '88%', name: 'Papua New Guinea' },
-  WST: { flag: 'ws', top: '70%', left: '96%', name: 'Samoa' }
+  AUD: { flag: 'au', coordinates: [133, -25], name: 'Australia' },
+  NZD: { flag: 'nz', coordinates: [174, -40], name: 'New Zealand' },
+  FJD: { flag: 'fj', coordinates: [179, -18], name: 'Fiji' },
+  PGK: { flag: 'pg', coordinates: [147, -6], name: 'Papua New Guinea' },
+  WST: { flag: 'ws', coordinates: [-171, -13], name: 'Samoa' }
 };
 
 export default function Home() {
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [dbStatus, setDbStatus] = useState('Loading...');
   
-  // Map Interactive Controls
-  const [mapZoom, setMapZoom] = useState(1);
-  const [mapPanX, setMapPanX] = useState(50); // Center is 50%
-  const mapContainerRef = useRef<HTMLDivElement>(null);
+  // Map Interactive Controls via react-simple-maps native handling
+  const [position, setPosition] = useState({ coordinates: [0, 0], zoom: 1 });
   
-  useEffect(() => {
-    const mapEl = mapContainerRef.current;
-    if (!mapEl) return;
-    
-    // Native wheel event allows us to aggressively cancel out browser-level zooming (passive: false)
-    const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault(); // Stop entire page from scaling
-        setMapZoom(z => Math.max(0.5, Math.min(5, z - e.deltaY * 0.01)));
-      }
-    };
-    
-    mapEl.addEventListener('wheel', handleWheel, { passive: false });
-    return () => mapEl.removeEventListener('wheel', handleWheel);
-  }, []);
+  const handleMoveEnd = (position: {coordinates: [number, number], zoom: number}) => {
+     setPosition(position);
+  };
   
-  // Dynamic mocked generation so we always view 27 plots visually regardless of DB pipeline delay
+  // Dynamic mocked generation so we always view 38 plots visually regardless of DB pipeline delay
   const generateMockData = (base: string) => {
     return Object.keys(CURRENCY_DICTIONARY)
       .filter(cur => cur !== base)
@@ -174,71 +164,77 @@ export default function Home() {
             <div className="text-xs text-gray-400 max-w-xs text-right">Azimuthal Equidistant Projection. Shows all 27 required markets.</div>
           </div>
           
-          <div ref={mapContainerRef} className="w-full relative bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center aspect-video min-h-[500px]">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-[#0a0a0a] to-[#0a0a0a] opacity-80"></div>
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+          <div className="w-full relative bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center p-0 aspect-video min-h-[500px]">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-[#0a0a0a] to-[#0a0a0a] opacity-80 pointer-events-none"></div>
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none"></div>
             
-            {/* The Scalable/Pannable Inner Map Layer */}
-            <div 
-              className="relative w-full h-full transition-transform duration-100 ease-out"
-              style={{
-                 transform: `scale(${mapZoom}) translateX(${(50 - mapPanX)}%)`,
-                 transformOrigin: 'center'
-              }}
-            >
-              <img 
-                src="/world.svg" 
-                alt="World Map Silhouette" 
-                className="absolute inset-0 w-full h-full object-fill opacity-[0.08] filter invert pointer-events-none" 
-              />
-              
-              {/* Loop over our full 27 set */}
-              {Object.keys(CURRENCY_DICTIONARY).map((curcode) => {
-                 const info = CURRENCY_DICTIONARY[curcode];
-                 const mathData = data.find(d => d.pair === curcode);
-                 
-                 // If it's the base currency, force specific values, else use math data
-                 const isBase = curcode === baseCurrency;
-                 const borderColor = isBase ? 'border-white' : (mathData ? `border-${getRiskColor(mathData.r, true)}` : 'border-gray-500');
-                 const shadowColor = isBase ? 'rgba(255,255,255,0.5)' : (mathData ? (mathData.r < 0.3 ? 'rgba(29,185,84,0.5)' : (mathData.r > 0.7 ? 'rgba(255,77,79,0.5)' : 'rgba(24,144,255,0.5)')) : 'transparent');
+            {/* React Simple Maps Fully Integrated Composable Component */}
+            <ComposableMap projection="geoEquirectangular" projectionConfig={{ scale: 180, center: [0, 0] }} style={{ width: "100%", height: "100%" }}>
+              <ZoomableGroup center={position.coordinates as [number, number]} zoom={position.zoom} onMoveEnd={handleMoveEnd} maxZoom={10}>
+                <Geographies geography={geoUrl}>
+                  {({ geographies }: { geographies: any[] }) =>
+                    geographies.map((geo: any) => (
+                      <Geography 
+                        key={geo.rsmKey} 
+                        geography={geo} 
+                        fill="rgba(255,255,255,0.06)"
+                        stroke="rgba(255,255,255,0.15)" 
+                        style={{
+                          default: { outline: "none" },
+                          hover: { fill: "rgba(255,255,255,0.1)", outline: "none" },
+                          pressed: { outline: "none" }
+                        }}
+                      />
+                    ))
+                  }
+                </Geographies>
 
-                 return (
-                   <div key={curcode} className="absolute group cursor-pointer transform hover:scale-150 transition-transform z-10 hover:z-30" style={{ top: info.top, left: info.left }}>
-                     <div className={`relative w-8 h-8 md:w-10 md:h-10 rounded-full overflow-hidden border-2 ${borderColor}`} style={{boxShadow:`0 0 15px ${shadowColor}`}}>
-                       <Image src={`https://flagcdn.com/w160/${info.flag}.png`} alt={info.name} fill className="object-cover" />
-                     </div>
-                     {/* Tooltip */}
-                     <div className="absolute left-1/2 -mt-2 -translate-y-full -translate-x-1/2 bg-spotify-dark border border-gray-700 p-3 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50">
-                       <div className="font-bold border-b border-gray-800 pb-2 mb-2 text-sm">{info.name} <span className="text-gray-400 font-mono text-xs float-right mt-0.5">{curcode}</span></div>
-                       {isBase ? (
-                         <div className="text-xs text-center text-gray-500 py-1">Current Base Anchor</div>
-                       ) : (
-                         <>
-                           <div className="text-xs flex justify-between"><span className="text-gray-400">Pearson (r):</span> <span className={`text-${getRiskColor(mathData?.r || 0, true)} font-mono font-bold`}>{mathData?.r}</span></div>
-                           <div className="text-xs flex justify-between mt-1"><span className="text-gray-400">Volatility ($\sigma$):</span> <span className={`text-${getRiskColor(mathData?.vol || 0)} font-mono`}>{mathData?.vol}%</span></div>
-                         </>
-                       )}
-                     </div>
-                   </div>
-                 );
-              })}
-            </div>
+                {Object.keys(CURRENCY_DICTIONARY).map((curcode) => {
+                   const info = CURRENCY_DICTIONARY[curcode];
+                   const mathData = data.find(d => d.pair === curcode);
+                   
+                   // If it's the base currency, force specific values, else use math data
+                   const isBase = curcode === baseCurrency;
+                   const borderColor = isBase ? 'border-white' : (mathData ? `border-${getRiskColor(mathData.r, true)}` : 'border-gray-500');
+                   const shadowColor = isBase ? 'rgba(255,255,255,0.5)' : (mathData ? (mathData.r < 0.3 ? 'rgba(29,185,84,0.5)' : (mathData.r > 0.7 ? 'rgba(255,77,79,0.5)' : 'rgba(24,144,255,0.5)')) : 'transparent');
+
+                   return (
+                     <Marker key={curcode} coordinates={info.coordinates}>
+                       <g className="cursor-pointer group transform hover:scale-[2.0] transition-transform origin-center">
+                         <foreignObject x={-14} y={-14} width={28} height={28} className="overflow-visible pointer-events-none">
+                           <div className={`relative w-7 h-7 rounded-full overflow-hidden border-2 ${borderColor} pointer-events-auto`} style={{boxShadow:`0 0 15px ${shadowColor}`}}>
+                             <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={info.name} fill className="object-cover" />
+                           </div>
+                           
+                           {/* Hover Tooltip - Escapes boundaries using absolute and massive width to prevent clipping inside tiny generic SVG objects */}
+                           <div className="absolute top-10 left-1/2 -mt-1 -translate-x-1/2 bg-spotify-dark border border-gray-700 p-2 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity w-40 pointer-events-none z-50">
+                             <div className="font-bold border-b border-gray-800 pb-1 mb-1 text-[11px] font-sans tracking-wide">{info.name} <span className="text-gray-400 font-mono text-[10px] float-right mt-0.5">{curcode}</span></div>
+                             {isBase ? (
+                               <div className="text-[10px] text-center text-gray-500 py-1">Current Base Anchor</div>
+                             ) : (
+                               <>
+                                 <div className="text-[11px] flex justify-between"><span className="text-gray-400">Pearson:</span> <span className={`text-${getRiskColor(mathData?.r || 0, true)} font-mono font-bold`}>{mathData?.r}</span></div>
+                                 <div className="text-[11px] flex justify-between mt-0.5"><span className="text-gray-400">Volatilty:</span> <span className={`text-${getRiskColor(mathData?.vol || 0)} font-mono`}>{mathData?.vol}%</span></div>
+                               </>
+                             )}
+                           </div>
+                         </foreignObject>
+                       </g>
+                     </Marker>
+                   );
+                })}
+              </ZoomableGroup>
+            </ComposableMap>
           </div>
 
           {/* Map Interaction Controls */}
           <div className="mt-6 flex flex-col sm:flex-row gap-6 items-center bg-black/40 p-4 rounded-xl border border-gray-800">
-             <div className="flex-1 w-full flex items-center gap-4">
-                 <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest whitespace-nowrap">Horizontal Pan</label>
-                 <input 
-                    type="range" min="0" max="100" 
-                    value={mapPanX} onChange={(e) => setMapPanX(Number(e.target.value))} 
-                    className="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-spotify-neonGreen" 
-                 />
-             </div>
-             <div className="w-full sm:w-1/3 flex items-center gap-4">
-                 <label className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-tight">Pinch<br/>Zoom</label>
-                 <div className="text-spotify-neonGreen font-mono font-bold w-12 text-right">{Math.round(mapZoom * 100)}%</div>
-                 <button onClick={() => {setMapZoom(1); setMapPanX(50);}} className="text-[10px] bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 outline-none rounded-md uppercase tracking-wider font-bold transition-colors">Reset</button>
+             <div className="w-full flex items-center justify-between gap-4">
+                 <div className="text-[11px] text-gray-500 font-bold uppercase tracking-widest leading-tight">Interactive<br/>Topography</div>
+                 <div className="flex items-center gap-4">
+                    <div className="text-spotify-neonGreen font-mono font-bold text-sm text-right">z {position.zoom.toFixed(1)}x</div>
+                    <button onClick={() => {setPosition({coordinates: [0,0], zoom: 1});}} className="text-[10px] bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 outline-none rounded-md uppercase tracking-wider font-bold transition-colors">Recenter Focus</button>
+                 </div>
              </div>
           </div>
         </section>
