@@ -28,31 +28,42 @@ export async function GET(request: Request) {
     });
 
     // Ensure array length alignment for math.
-    // Given the schedule may miss days differently, we align strictly by date
+    // Given global holidays miss days differently across 39 countries, we use strict LOCF (Last Observation Carried Forward).
+    const pairNames = Array.from(new Set(allData.map(d => d.currencyPair)));
     const alignedData: Record<string, number[]> = {};
-    const pairNames = Object.keys(grouped);
+    pairNames.forEach(pair => alignedData[pair] = []);
     
-    pairNames.forEach(pair => {
-      alignedData[pair] = [];
+    // Fast O(1) time-lookup map
+    const lookup: Record<string, Record<number, number>> = {};
+    allData.forEach(row => {
+       if (!lookup[row.currencyPair]) lookup[row.currencyPair] = {};
+       lookup[row.currencyPair][row.date.getTime()] = row.closingPrice;
     });
 
-    // Extremely basic alignment approach: only include days where all requested pairs have data.
-    // In production, we forward-fill. For now, strict intersection.
-    const validDates = dates.filter(t => {
-      const d = new Date(t);
-      return pairNames.every(pair => allData.find(x => x.currencyPair === pair && x.date.getTime() === t));
+    const lastKnown: Record<string, number> = {};
+    let validDaysUsed = 0;
+
+    dates.forEach(t => {
+       // 1. Update last known price if market was open
+       pairNames.forEach(pair => {
+          if (lookup[pair] && lookup[pair][t] !== undefined) {
+             lastKnown[pair] = lookup[pair][t];
+          }
+       });
+
+       // 2. Only record aligned vector if ALL currencies have booted up and registered at least 1 historical price
+       const allMarketsSeeded = pairNames.every(pair => lastKnown[pair] !== undefined);
+       if (allMarketsSeeded) {
+          pairNames.forEach(pair => {
+             alignedData[pair].push(lastKnown[pair]);
+          });
+          validDaysUsed++;
+       }
     });
 
-    if (validDates.length < 2) {
+    if (validDaysUsed < 2) {
       return NextResponse.json({ error: 'Insufficient aligned data for correlation.' }, { status: 400 });
     }
-
-    pairNames.forEach(pair => {
-      validDates.forEach(t => {
-        const val = allData.find(x => x.currencyPair === pair && x.date.getTime() === t);
-        if (val) alignedData[pair].push(val.closingPrice);
-      });
-    });
 
     // Compute Volatility (Risk)
     const riskRankings = pairNames.map(pair => {
@@ -86,7 +97,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       riskRankings,
       correlations,
-      validDaysUsed: validDates.length,
+      validDaysUsed: validDaysUsed,
       baseCurrency: base
     });
   } catch (error) {
