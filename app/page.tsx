@@ -63,8 +63,11 @@ const CURRENCY_DICTIONARY: Record<string, { flag: string, coordinates: [number, 
 
 export default function Home() {
   const currentYear = new Date().getFullYear().toString();
+  const today = new Date();
+  const currentDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  
   const [dateStart, setDateStart] = useState(`${currentYear}-01-01`);
-  const [dateEnd, setDateEnd] = useState(`${currentYear}-12-31`);
+  const [dateEnd, setDateEnd] = useState(currentDateStr);
   
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [dbStatus, setDbStatus] = useState('Loading...');
@@ -222,11 +225,11 @@ export default function Home() {
                       <Geography 
                         key={geo.rsmKey} 
                         geography={geo} 
-                        fill="rgba(255,255,255,0.06)"
-                        stroke="rgba(255,255,255,0.15)" 
+                        fill="rgba(255,255,255,0.18)"
+                        stroke="rgba(255,255,255,0.3)" 
                         style={{
                           default: { outline: "none" },
-                          hover: { fill: "rgba(255,255,255,0.1)", outline: "none" },
+                          hover: { fill: "rgba(255,255,255,0.3)", outline: "none" },
                           pressed: { outline: "none" }
                         }}
                       />
@@ -261,7 +264,7 @@ export default function Home() {
                          
                          {/* 3. The Tooltip - Escapes boundaries using absolute and DOES NOT SCALE, keeping text legible & sharp */}
                          <foreignObject x={-14} y={-14} width={28} height={28} className="overflow-visible pointer-events-none z-50">
-                           <div className="absolute top-8 left-1/2 -mt-1 -translate-x-1/2 bg-spotify-dark border border-gray-700 p-2 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity w-40 pointer-events-none">
+                           <div className="absolute bottom-8 left-1/2 mb-1 -translate-x-1/2 bg-spotify-dark border border-gray-700 p-2 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.8)] opacity-0 group-hover:opacity-100 transition-opacity w-44 pointer-events-none">
                              <div className="font-bold border-b border-gray-800 pb-1 mb-1 text-[11px] font-sans tracking-wide">{info.name} <span className="text-gray-400 font-mono text-[10px] float-right mt-0.5">{curcode}</span></div>
                              {isBase ? (
                                <div className="text-[10px] text-center text-gray-500 py-1">Current Base Anchor</div>
@@ -281,14 +284,41 @@ export default function Home() {
             </ComposableMap>
           </div>
 
-          {/* Map Interaction Controls */}
-          <div className="mt-6 flex flex-col sm:flex-row gap-6 items-center bg-black/40 p-4 rounded-xl border border-gray-800">
-             <div className="w-full flex items-center justify-between gap-4">
-                 <div className="text-[11px] text-gray-500 font-bold uppercase tracking-widest leading-tight">Interactive<br/>Topography</div>
-                 <div className="flex items-center gap-4">
-                    <div className="text-spotify-neonGreen font-mono font-bold text-sm text-right">z {position.zoom.toFixed(1)}x</div>
-                    <button onClick={() => {setPosition({coordinates: [0,0], zoom: 1});}} className="text-[10px] bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 outline-none rounded-md uppercase tracking-wider font-bold transition-colors">Recenter Focus</button>
+          {/* Map Interaction Controls & Explainer */}
+          <div className="mt-6 flex flex-col gap-4 bg-black/40 p-5 rounded-2xl border border-gray-800">
+             
+             {/* Slider & Actions */}
+             <div className="w-full flex flex-col md:flex-row items-center justify-between gap-6 border-b border-gray-800/60 pb-5">
+                 
+                 <div className="flex items-center gap-3 w-full md:w-1/2 bg-spotify-dark/50 px-4 py-2 rounded-lg border border-gray-800/80">
+                     <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-tight whitespace-nowrap">Pan Longitude</span>
+                     <input 
+                        type="range" 
+                        min="-180" 
+                        max="180" 
+                        step="1"
+                        value={position.coordinates[0]}
+                        onChange={(e) => setPosition({ ...position, coordinates: [parseFloat(e.target.value), position.coordinates[1]] as [number, number] })}
+                        className="w-full accent-spotify-neonGreen h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer"
+                     />
+                     <span className="text-[10px] font-mono text-gray-400 w-8 text-right bg-black/50 px-1 py-0.5 rounded">{position.coordinates[0].toFixed(0)}°</span>
                  </div>
+                 
+                 <div className="flex items-center gap-4 w-full md:w-auto justify-end">
+                    <div className="text-spotify-neonGreen font-mono font-bold text-sm text-right bg-spotify-dark/50 px-3 py-1.5 rounded-lg border border-gray-800/80">z {position.zoom.toFixed(1)}x</div>
+                    <button onClick={() => {setPosition({coordinates: [0,0], zoom: 1});}} className="text-[10px] bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 outline-none rounded-lg uppercase tracking-wider font-bold transition-colors shadow-lg">Recenter Map</button>
+                 </div>
+             </div>
+             
+             {/* Financial Metrics Explainer */}
+             <div className="pt-1">
+               <p className="text-[11.5px] text-gray-400 leading-relaxed font-medium">
+                 <strong className="text-spotify-neonGreen uppercase tracking-widest font-black mr-1.5">Pearson Correlation (r):</strong> 
+                 Measures the linear alignment between a currency and your Base Anchor. Ranges from <span className="text-white font-mono">-1.0</span> (perfect inverse movement) to <span className="text-white font-mono">1.0</span> (perfect lockstep). Values near 0 indicate low statistical correlation, offering strong diversification resilience.
+                 <br/>
+                 <strong className="text-spotify-electricBlue uppercase tracking-widest font-black mr-1.5 mt-2 inline-block">Volatility (σ):</strong> 
+                 The annualized standard deviation of daily returns. Higher percentages indicate dramatic price fluctuations and amplified exposure risk relative to the Base Anchor.
+               </p>
              </div>
           </div>
         </section>
@@ -310,8 +340,8 @@ export default function Home() {
                     <div className="relative w-6 h-6 rounded-full overflow-hidden shadow-sm">
                        <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={metric.pair} fill className="object-cover" />
                     </div>
-                    {/* Tooltip explicitly identifying flag context */}
-                    <div className="absolute left-1/2 -top-2 -translate-y-full -translate-x-1/2 bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 flex flex-col items-center">
+                    {/* Tooltip dynamically shooting right to explicitly prevent #1 list-item vertical container clipping */}
+                    <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 flex flex-col items-start min-w-max">
                        <span className="text-[11px] font-bold text-white whitespace-nowrap leading-tight">{info.name}</span>
                        <span className="text-[9px] font-mono text-spotify-neonGreen uppercase tracking-widest">{metric.pair}</span>
                     </div>
