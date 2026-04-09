@@ -1,5 +1,6 @@
 import prisma from '../../prisma/client';
-import yahooFinance from 'yahoo-finance2';
+import yahooFinanceImport from 'yahoo-finance2';
+const yahooFinance = (yahooFinanceImport as any).default || yahooFinanceImport;
 
 // 27 Major Global Currencies list against USD mapping loosely to regional pairs
 export const CURRENCY_PAIRS = [
