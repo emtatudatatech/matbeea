@@ -1,7 +1,7 @@
 "use client";
 
 import Image from 'next/image';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
 
 // TopoJSON definition for the D3 Map implementation
@@ -62,11 +62,32 @@ const CURRENCY_DICTIONARY: Record<string, { flag: string, coordinates: [number, 
 };
 
 export default function Home() {
+  const currentYear = new Date().getFullYear().toString();
+  const [dateStart, setDateStart] = useState(`${currentYear}-01-01`);
+  const [dateEnd, setDateEnd] = useState(`${currentYear}-12-31`);
+  
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [dbStatus, setDbStatus] = useState('Loading...');
   
   // Map Interactive Controls via react-simple-maps native handling
   const [position, setPosition] = useState({ coordinates: [0, 0], zoom: 1 });
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const mapEl = mapContainerRef.current;
+    if (!mapEl) return;
+    
+    // Aggressively trap wheel scale operations to stop standard browser zoom or dashboard scrolling
+    const blockGlobalZoom = (e: WheelEvent) => {
+      // Stop Safari/Chrome entire page scaling on trackpad pinch
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault(); 
+      }
+    };
+    
+    mapEl.addEventListener('wheel', blockGlobalZoom, { passive: false });
+    return () => mapEl.removeEventListener('wheel', blockGlobalZoom);
+  }, []);
   
   const handleMoveEnd = (position: {coordinates: [number, number], zoom: number}) => {
      setPosition(position);
@@ -87,7 +108,7 @@ export default function Home() {
 
   useEffect(() => {
     // Attempt to pull real data from standard API we created
-    fetch(`/api/engine?base=${baseCurrency}`)
+    fetch(`/api/engine?base=${baseCurrency}&start=${dateStart}&end=${dateEnd}`)
        .then(r => r.json())
        .then(res => {
          if (res.error) {
@@ -110,7 +131,7 @@ export default function Home() {
          setDbStatus('Local DB Error - Showing Generated Plot');
          setData(generateMockData(baseCurrency));
        });
-  }, [baseCurrency]);
+  }, [baseCurrency, dateStart, dateEnd]);
 
   const getRiskColor = (volatility: number, isCorrelation: boolean = false) => {
     if (isCorrelation) {
@@ -136,13 +157,33 @@ export default function Home() {
         <h1 className="text-2xl font-black tracking-tighter flex items-center gap-2">
           <span className="text-spotify-neonGreen text-3xl">⏣</span> <span className="hidden sm:inline">FX RISK DASHBOARD</span>
         </h1>
-        <nav className="hidden md:flex gap-8 text-sm font-bold text-gray-400">
+        <nav className="hidden xl:flex gap-8 text-sm font-bold text-gray-400">
           <a href="#map" className="hover:text-white transition-colors uppercase tracking-wider">Global Map</a>
           <a href="#rankings" className="hover:text-white transition-colors uppercase tracking-wider">Risk Rankings</a>
           <a href="#optimizer" className="hover:text-white transition-colors uppercase tracking-wider">Optimizer</a>
           <a href="#quickcheck" className="hover:text-white transition-colors uppercase tracking-wider">Pair Analysis</a>
         </nav>
-        <div className="flex gap-3 items-center">
+        
+        <div className="flex gap-4 items-center">
+          {/* Timeline Filter */}
+          <div className="hidden md:flex gap-2 items-center bg-black/40 px-3 py-1.5 rounded-lg border border-gray-800">
+             <label className="text-[10px] uppercase font-bold text-gray-500 mr-1">Range</label>
+             <input 
+               type="date" 
+               value={dateStart} 
+               onChange={e => setDateStart(e.target.value)}
+               className="bg-transparent text-xs text-white outline-none cursor-pointer font-mono [color-scheme:dark]"
+              />
+             <span className="text-gray-600">-</span>
+             <input 
+               type="date" 
+               value={dateEnd} 
+               onChange={e => setDateEnd(e.target.value)}
+               className="bg-transparent text-xs text-white outline-none cursor-pointer font-mono [color-scheme:dark]"
+              />
+          </div>
+          
+          {/* Base Anchor Option */}
           <label htmlFor="baseCurrency" className="text-xs uppercase tracking-widest font-black text-gray-500">Base Currency</label>
           <select 
             id="baseCurrency" 
@@ -164,7 +205,11 @@ export default function Home() {
             <div className="text-xs text-gray-400 max-w-xs text-right">Azimuthal Equidistant Projection. Shows all 27 required markets.</div>
           </div>
           
-          <div className="w-full relative bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center p-0 aspect-video min-h-[500px]">
+          <div 
+             ref={mapContainerRef} 
+             style={{ touchAction: 'none', overscrollBehavior: 'none' }}
+             className="w-full relative bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center p-0 aspect-video min-h-[500px]"
+          >
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-[#0a0a0a] to-[#0a0a0a] opacity-80 pointer-events-none"></div>
             <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none"></div>
             
@@ -200,14 +245,23 @@ export default function Home() {
 
                    return (
                      <Marker key={curcode} coordinates={info.coordinates}>
-                       <g className="cursor-pointer group transform hover:scale-[2.0] transition-transform origin-center">
-                         <foreignObject x={-14} y={-14} width={28} height={28} className="overflow-visible pointer-events-none">
-                           <div className={`relative w-7 h-7 rounded-full overflow-hidden border-2 ${borderColor} pointer-events-auto`} style={{boxShadow:`0 0 15px ${shadowColor}`}}>
-                             <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={info.name} fill className="object-cover" />
-                           </div>
-                           
-                           {/* Hover Tooltip - Escapes boundaries using absolute and massive width to prevent clipping inside tiny generic SVG objects */}
-                           <div className="absolute top-10 left-1/2 -mt-1 -translate-x-1/2 bg-spotify-dark border border-gray-700 p-2 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity w-40 pointer-events-none z-50">
+                       {/* Master group container holding hover logic. It DOES NOT scale. */}
+                       <g className="cursor-pointer group">
+                         {/* 1. Invisible Static Hit Area. This NEVER moves, preventing all hover math thrashing/shaking */}
+                         <circle cx="0" cy="0" r="26" fill="transparent" className="pointer-events-auto" />
+                         
+                         {/* 2. The Flag Bubble - Scales strictly from center on group hover */}
+                         <g className="transform group-hover:scale-[1.8] transition-transform origin-center pointer-events-none">
+                           <foreignObject x={-14} y={-14} width={28} height={28} className="overflow-visible pointer-events-none">
+                             <div className={`relative w-7 h-7 rounded-full overflow-hidden border-2 ${borderColor}`} style={{boxShadow:`0 0 15px ${shadowColor}`}}>
+                               <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={info.name} fill className="object-cover" />
+                             </div>
+                           </foreignObject>
+                         </g>
+                         
+                         {/* 3. The Tooltip - Escapes boundaries using absolute and DOES NOT SCALE, keeping text legible & sharp */}
+                         <foreignObject x={-14} y={-14} width={28} height={28} className="overflow-visible pointer-events-none z-50">
+                           <div className="absolute top-8 left-1/2 -mt-1 -translate-x-1/2 bg-spotify-dark border border-gray-700 p-2 rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity w-40 pointer-events-none">
                              <div className="font-bold border-b border-gray-800 pb-1 mb-1 text-[11px] font-sans tracking-wide">{info.name} <span className="text-gray-400 font-mono text-[10px] float-right mt-0.5">{curcode}</span></div>
                              {isBase ? (
                                <div className="text-[10px] text-center text-gray-500 py-1">Current Base Anchor</div>
@@ -252,8 +306,15 @@ export default function Home() {
               <div key={i} className="flex items-center justify-between bg-spotify-dark/50 p-3 rounded-xl border border-gray-800/50 hover:bg-gray-800/50 transition-colors">
                 <div className="flex items-center gap-3 w-1/3">
                   <span className="text-xs font-black text-gray-500 w-4">{i+1}</span>
-                  <div className="relative w-6 h-6 rounded-full overflow-hidden shadow-sm">
-                     <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={metric.pair} fill className="object-cover" />
+                  <div className="relative group cursor-pointer">
+                    <div className="relative w-6 h-6 rounded-full overflow-hidden shadow-sm">
+                       <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={metric.pair} fill className="object-cover" />
+                    </div>
+                    {/* Tooltip explicitly identifying flag context */}
+                    <div className="absolute left-1/2 -top-2 -translate-y-full -translate-x-1/2 bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 flex flex-col items-center">
+                       <span className="text-[11px] font-bold text-white whitespace-nowrap leading-tight">{info.name}</span>
+                       <span className="text-[9px] font-mono text-spotify-neonGreen uppercase tracking-widest">{metric.pair}</span>
+                    </div>
                   </div>
                   <span className="font-bold text-sm">{metric.pair}</span>
                 </div>
