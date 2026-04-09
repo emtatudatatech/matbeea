@@ -29,7 +29,13 @@ export async function GET(request: Request) {
 
     // Ensure array length alignment for math.
     // Given global holidays miss days differently across 39 countries, we use strict LOCF (Last Observation Carried Forward).
-    const pairNames = Array.from(new Set(allData.map(d => d.currencyPair)));
+    // EXCLUDE pairs with fewer than 50 data points so that anomaly currencies (like WST) don't lock down the entire global timeline matrix 
+    const PAIR_THRESHOLD = 50; 
+    const counts: Record<string, number> = {};
+    allData.forEach(r => { counts[r.currencyPair] = (counts[r.currencyPair] || 0) + 1; });
+    const validPairs = Object.keys(counts).filter(p => counts[p] >= PAIR_THRESHOLD);
+
+    const pairNames = validPairs;
     const alignedData: Record<string, number[]> = {};
     pairNames.forEach(pair => alignedData[pair] = []);
     
