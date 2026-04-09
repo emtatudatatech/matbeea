@@ -6,9 +6,21 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const base = searchParams.get('base') || 'USD';
+    const startStr = searchParams.get('start');
+    const endStr = searchParams.get('end');
     
-    // Fetch all records
+    // Construct Prisma dynamic where constraints based on calendar parameters
+    const whereClause: any = {};
+    if (startStr && endStr) {
+       whereClause.date = {
+          gte: new Date(startStr),
+          lte: new Date(endStr)
+       };
+    }
+    
+    // Fetch specifically filtered records
     const allData = await prisma.fxDailyPrice.findMany({
+      where: whereClause,
       orderBy: { date: 'asc' }
     });
 
