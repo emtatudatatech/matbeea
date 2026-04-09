@@ -72,6 +72,15 @@ export default function Home() {
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [dbStatus, setDbStatus] = useState('Loading...');
   
+  // Interactive Optimizer States
+  const [optA, setOptA] = useState('JPY');
+  const [optB, setOptB] = useState('CHF');
+  const [optC, setOptC] = useState('USD');
+  const [optD, setOptD] = useState('GBP');
+  
+  // UI States
+  const [rankSort, setRankSort] = useState<'desc' | 'asc'>('desc');
+  
   // Map Interactive Controls via react-simple-maps native handling
   const [position, setPosition] = useState({ coordinates: [0, 0], zoom: 1 });
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -146,6 +155,24 @@ export default function Home() {
     if (volatility > 8) return 'spotify-electricBlue';
     return 'spotify-neonGreen';
   }
+  
+  // Simulated Component Heuristic Formula
+  const calculateGlobalRisk = () => {
+     if (data.length === 0) return "4.2";
+     const getM = (sym: string) => data.find(d => d.pair === sym) || { vol: 8.0, r: 0.2 };
+     const mA = getM(optA); const mB = getM(optB); const mC = getM(optC); const mD = getM(optD);
+     
+     // Weighted variance formula integrating individual correlation scalars against local volatility 
+     const riskRaw = (
+       (mA.vol * 0.45 * (1 + mA.r)) + 
+       (mB.vol * 0.30 * (1 + mB.r)) + 
+       (mC.vol * 0.05 * (1 + mC.r)) + 
+       (mD.vol * 0.20 * (1 + Math.abs(mD.r))) 
+     ) * 0.45;
+     
+     return Math.max(1.2, riskRaw).toFixed(1);
+  };
+  const simulatedGlobalRisk = calculateGlobalRisk();
 
   const [qcCurrencyA, setQcCurrencyA] = useState('USD');
   const [qcCurrencyB, setQcCurrencyB] = useState('JPY');
@@ -325,9 +352,21 @@ export default function Home() {
         
         {/* Risk Rankings Side Panel */}
         <section className="bg-spotify-charchoal rounded-3xl p-8 shadow-2xl border border-gray-800 overflow-hidden flex flex-col" id="rankings">
-          <h2 className="text-xl font-bold mb-6 tracking-tight">Risk Rankings <span className="block text-sm text-gray-400 font-normal mt-1">Ann. Volatility Spread (&sigma;) for all 27</span></h2>
+          <div className="flex justify-between items-start mb-3">
+             <h2 className="text-xl font-bold tracking-tight">Risk Rankings <span className="block text-sm text-gray-400 font-normal mt-1">Ann. Volatility Spread (&sigma;) for all 27</span></h2>
+             <button onClick={() => setRankSort(prev => prev === 'desc' ? 'asc' : 'desc')} className="text-[10px] font-bold text-gray-400 bg-black/40 hover:bg-gray-800 px-3 py-2 rounded-lg uppercase tracking-wider transition-colors border border-gray-800 hover:text-white flex items-center shadow-md">
+               Sort: {rankSort === 'desc' ? 'Highest First ↓' : 'Lowest First ↑'}
+             </button>
+          </div>
+          
+          <p className="text-[11px] text-gray-500 mb-5 bg-black/20 p-3 rounded-lg border border-gray-800/50 leading-relaxed font-medium">
+             {rankSort === 'desc' 
+                 ? 'Displaying the most highly volatile currencies at the top, descending to the most stable base-pegged anchors at the bottom.' 
+                 : 'Displaying the most stable, low-volatility currencies at the top, ascending to the highest risk assets.'}
+          </p>
+          
           <div className="flex flex-col gap-4 overflow-y-auto pr-2 pb-4 hover:scrollbar-thin" style={{maxHeight: '500px'}}>
-            {data.slice(0, 27).map((metric, i) => {
+            {[...data].sort((a,b) => rankSort === 'desc' ? b.vol - a.vol : a.vol - b.vol).slice(0, 27).map((metric, i) => {
               const info = CURRENCY_DICTIONARY[metric.pair];
               if (!info) return null;
               const color = `bg-${getRiskColor(metric.vol)}`;
@@ -374,38 +413,46 @@ export default function Home() {
                 </svg>
                 <div className="text-center">
                   <div className="text-xs text-gray-500 uppercase font-bold tracking-widest">Global Risk</div>
-                  <div className="text-3xl font-black text-white">4.2%</div>
+                  <div className="text-3xl font-black text-white">{((data.find(d => d.pair === optA)?.vol || 0) * 0.45 + (data.find(d => d.pair === optB)?.vol || 0) * 0.3 + (data.find(d => d.pair === optC)?.vol || 0) * 0.05 + (data.find(d => d.pair === optD)?.vol || 0) * 0.2).toFixed(1)}%</div>
                 </div>
              </div>
              
              {/* Weightings */}
              <div className="flex-1 w-full grid grid-cols-2 gap-4">
-                <div className="bg-black/40 p-4 rounded-xl border border-gray-800">
-                  <div className="text-xs text-gray-500 mb-1">Uncorrelated Asset 1</div>
+                <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
+                  <div className="text-xs text-gray-500 mb-1 pointer-events-none">Uncorrelated Asset 1</div>
                   <div className="flex justify-between items-end">
-                    <span className="font-bold text-lg text-spotify-neonGreen">JPY</span>
-                    <span className="font-mono text-xl">45.0%</span>
+                    <select value={optA} onChange={(e) => setOptA(e.target.value)} className="font-bold text-lg text-spotify-neonGreen bg-transparent outline-none cursor-pointer appearance-none w-24">
+                       {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
+                    </select>
+                    <span className="font-mono text-xl pointer-events-none">45.0%</span>
                   </div>
                 </div>
-                <div className="bg-black/40 p-4 rounded-xl border border-gray-800">
-                  <div className="text-xs text-gray-500 mb-1">Uncorrelated Asset 2</div>
+                <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
+                  <div className="text-xs text-gray-500 mb-1 pointer-events-none">Uncorrelated Asset 2</div>
                   <div className="flex justify-between items-end">
-                    <span className="font-bold text-lg text-spotify-electricBlue">CHF</span>
-                    <span className="font-mono text-xl">30.0%</span>
+                    <select value={optB} onChange={(e) => setOptB(e.target.value)} className="font-bold text-lg text-spotify-electricBlue bg-transparent outline-none cursor-pointer appearance-none w-24">
+                       {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
+                    </select>
+                    <span className="font-mono text-xl pointer-events-none">30.0%</span>
                   </div>
                 </div>
-                <div className="bg-black/40 p-4 rounded-xl border border-gray-800">
-                  <div className="text-xs text-gray-500 mb-1">Diversifier (Constraint)</div>
+                <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
+                  <div className="text-xs text-gray-500 mb-1 pointer-events-none">Diversifier (Constraint)</div>
                   <div className="flex justify-between items-end">
-                    <span className="font-bold text-lg text-gray-300">USD</span>
-                    <span className="font-mono text-xl">5.0%</span>
+                    <select value={optC} onChange={(e) => setOptC(e.target.value)} className="font-bold text-lg text-gray-300 bg-transparent outline-none cursor-pointer appearance-none w-24">
+                       {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
+                    </select>
+                    <span className="font-mono text-xl pointer-events-none">5.0%</span>
                   </div>
                 </div>
-                <div className="bg-black/40 p-4 rounded-xl border border-gray-800">
-                  <div className="text-xs text-gray-500 mb-1">Diversifier (Constraint)</div>
+                <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
+                  <div className="text-xs text-gray-500 mb-1 pointer-events-none">Diversifier (Constraint)</div>
                   <div className="flex justify-between items-end">
-                    <span className="font-bold text-lg text-gray-300">GBP</span>
-                    <span className="font-mono text-xl">5.0%</span>
+                    <select value={optD} onChange={(e) => setOptD(e.target.value)} className="font-bold text-lg text-white bg-transparent outline-none cursor-pointer appearance-none w-24">
+                       {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
+                    </select>
+                    <span className="font-mono text-xl pointer-events-none">20.0%</span>
                   </div>
                 </div>
              </div>

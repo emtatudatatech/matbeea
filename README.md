@@ -4,18 +4,19 @@ A secure, high-performance Full-Stack Application built with **Next.js (App Rout
 
 ## Features
 
-- **Global 2D Asset Map**: Dynamic azimuthal equidistant projection UI grouping currencies continentally, complete with interactive hovered tracking of Volatility ($\sigma$) and Correlation ($r$) stats.
-- **Real-Time Algorithms**: Computes daily correlation vectors dynamically via `simple-statistics`, ensuring completely strictly typed rendering devoid of UI-breaking `NaN` or divide-by-zero artifacts.
-- **Serverless PostgreSQL**: Hosted on [Neon.tech](https://neon.tech/) scaling-to-zero when unvisited while remaining natively type-synced through Prisma ORM.
-- **Headless Ingestion Pipeline**: Integrates a `netlify.toml` specified cron job to pull deep time-series snapshots (Back into Q1 2024 at minimum) seamlessly via `yahoo-finance2` behind-the-scenes.
-- **Premium Aesthetics**: Engineered with deep contrast dark-modes (`#121212`), sophisticated font weights, floating glassmorphism overlays, and neon functional accents natively orchestrated through TailwindCSS.
+- **Global Interactive Map (`react-simple-maps`)**: Dynamic D3-backed TopoJSON projection utilizing pinch-to-zoom mapping, geographic panning horizontal sliders, and hover-state tracking of localized $\sigma$ and Pearson nodes.
+- **Serverless PostgreSQL**: Hosted on [Neon.tech](https://neon.tech/) scaling-to-zero when unvisited while remaining natively type-synced through Prisma ORM with defensive `createMany` bulk-batching to respect edge execution limits.
+- **Headless Ingestion Pipeline**: Integrates a `netlify.toml` specified cron job to pull deep time-series snapshots (Back into Q1 2024 at minimum) seamlessly via `yahoo-finance2.chart()` architecture.
+- **Real-Time LOCF Mathematical Engine**: Computes daily correlation vectors dynamically via `simple-statistics`, bridging misaligned global market holidays automatically strictly utilizing algorithmic Last-Observation-Carried-Forward (LOCF) alignment strategies.
+- **Dynamic Interaction Modules**: Engineered with high-contrast UI layers overlaying interactive Native dropdown asset-selection logic to manually mock complex Portfolio Variances dynamically over a live localized Timeline Filter component.
 
 ## Architecture
 
 - **Frontend**: Next.js 15, React 19, TailwindCSS 3 
 - **Backend / APIs**: Next.js Server Components / Endpoints + Netlify Scheduled Functions
 - **Database Layer**: Neon Serverless Postgres + Prisma Client ORM
-- **Market Sourcing**: Yahoo Finance Native Fetcher
+- **Market Sourcing**: Yahoo Finance v3 (`chart()` Engine)
+- **Geographic Mapping**: `react-simple-maps` (D3 & TopoJSON)
 
 ## Covered Currencies 
 
@@ -50,3 +51,6 @@ This application relies on aggressive edge caching capabilities and strictly adh
 npm run build
 ```
 *(Note: A `postinstall` script ensures Netlify CI rebuilds natively compiled Prisma components accurately against Ubuntu servers).*
+
+## Application
+Access the application's latest version here: [FX Risk Dashboard](https://splendid-jelly-8ac936.netlify.app/)
