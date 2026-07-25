@@ -2,7 +2,8 @@ import prisma from '../../prisma/client';
 import YahooFinance from 'yahoo-finance2';
 const yahooFinance = new YahooFinance();
 
-// 27 Major Global Currencies list against USD mapping loosely to regional pairs
+// 38 currency pairs quoted against USD, covering the 39 currencies in the
+// dashboard's universe (the USD base itself is not a pair).
 export const CURRENCY_PAIRS = [
   'ZARUSD=X', 'NGNUSD=X', 'EGPUSD=X', 'KESUSD=X', 'ZMWUSD=X', 'MADUSD=X',
   'JPYUSD=X', 'CNYUSD=X', 'INRUSD=X', 'HKDUSD=X', 'KRWUSD=X',

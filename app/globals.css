@@ -1,48 +1,118 @@
 @import 'tailwindcss';
 
-@theme {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+/* The `dark:` variant follows an explicit class rather than the OS setting, so the
+   in-app toggle can override the system preference. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-  --color-spotify-dark: #121212;
-  --color-spotify-charchoal: #181818;
-  --color-spotify-neonGreen: #1db954;
-  --color-spotify-crimson: #ff4d4f;
-  --color-spotify-electricBlue: #1890ff;
+/* `inline` keeps the utilities pointing at the custom properties instead of
+   copying their values, so every token below re-resolves when the theme flips. */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-edge: var(--edge);
+  --color-edge-strong: var(--edge-strong);
+
+  --color-risk-low: var(--risk-low);
+  --color-risk-mid: var(--risk-mid);
+  --color-risk-high: var(--risk-high);
 }
 
-/*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
+/* Light theme — the default.
+   Risk colours are stepped for a white surface: the dark-theme green and red only
+   reach ~2.6:1 and ~3.3:1 here, short of the 4.5:1 that body text needs. */
+:root {
+  color-scheme: light;
 
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
+  --surface: #f4f6f9;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef1f5;
+
+  --ink: #14161a;
+  --ink-muted: #525c6b;
+  --ink-faint: #6b7684;
+
+  --edge: #d7dde5;
+  --edge-strong: #b9c2cd;
+
+  --risk-low: #0f7a38;
+  --risk-mid: #0b63ce;
+  --risk-high: #c62828;
+
+  /* On a light surface the geography reads through its borders, so the coastline
+     stroke carries the contrast (3.4:1) rather than the land fill. */
+  --map-ocean: #cfd9e6;
+  --map-land: #fdfefe;
+  --map-border: #7d8b9d;
+  --map-grid: rgba(20, 22, 26, 0.05);
+
+  /* Categorical slots for the optimizer donut, stepped for the light surface. */
+  --holding-1: #2a78d6;
+  --holding-2: #eb6834;
+  --holding-3: #1baf7a;
+  --holding-4: #eda100;
+}
+
+/* Dark theme — its own steps, not an inversion of the light values. */
+.dark {
+  color-scheme: dark;
+
+  --surface: #101216;
+  --surface-raised: #1b1e24;
+  --surface-sunken: #14171c;
+
+  --ink: #f2f4f7;
+  --ink-muted: #b3bac4;
+  --ink-faint: #8a94a1;
+
+  --edge: #333a45;
+  --edge-strong: #454e5c;
+
+  --risk-low: #1db954;
+  --risk-mid: #1890ff;
+  --risk-high: #ff4d4f;
+
+  /* Land is lifted well clear of the ocean here — 3.4:1, against the 1.5:1 that
+     the previous translucent-white fill managed. */
+  --map-ocean: #101418;
+  --map-land: #626b78;
+  --map-border: #98a2b1;
+  --map-grid: rgba(255, 255, 255, 0.045);
+
+  --holding-1: #3987e5;
+  --holding-2: #d95926;
+  --holding-3: #199e70;
+  --holding-4: #c98500;
+}
+
+/* Tailwind v4 defaults borders to currentcolor; anchoring them to the theme edge
+   means an unstyled border still tracks the active theme. */
 @layer base {
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
-  }
-}
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #121212;
-    --foreground: #ededed;
+    border-color: var(--edge);
   }
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
+  color: var(--ink);
+  background: var(--surface);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

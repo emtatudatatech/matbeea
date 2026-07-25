@@ -13,7 +13,7 @@ The Global FX Risk & Correlation Dashboard is a high-performance financial analy
 - **Data Ingestion API:** `yahoo-finance2` (v4 `chart()` spec)
 - **Math Engine:** `simple-statistics` (Pearson Coefficient, Standard Deviation)
 - **Deployment Platform:** Netlify (Edge caching & Cron Scheduled Functions)
-- **Geographic Modeling:** `react-simple-maps` (D3/TopoJSON projection)
+- **Geographic Modeling:** `d3-geo` / `d3-zoom` / `topojson-client`, Equal Earth projection
 - **Tooling:** TypeScript 6.x, ESLint 9.x flat config (`eslint.config.mjs`)
 
 ### 2.1. Dependency Modernization (July 2026)
@@ -46,9 +46,11 @@ A full dependency refresh moved every package to its latest usable release:
 - **Dynamic Boundary Filters:** Securely accepts string-based temporal `start` and `end` bounds queried safely through Prisma `gte` and `lte` arguments directly mapped to user interactions globally.
 
 ### 3.3. Interactive Dashboard UI
-- **Styling:** Adheres strictly to a sophisticated, ultra-premium "Spotify-style" dark theme UI (utilizing deep charcoals, `#121212` backgrounds, and high-contrast neon accents, built exclusively with native Tailwind utilities).
+- **Styling & Theming:** Light and dark themes, selectable via a persisted in-app toggle and defaulting to the operating-system preference. Both are expressed through semantic CSS custom properties (`surface`, `ink`, `edge`, `risk-*`, `holding-*`) declared in `app/globals.css`, so components name roles rather than colours. Each theme carries its own validated values instead of inverting the other: the dark-theme green and red reach only ~2.6:1 and ~3.3:1 on a white surface, short of the 4.5:1 that text requires. Preference is applied by an inline pre-paint script, so a dark-mode user never sees a light flash.
+- **Map Legibility:** Land now clears the ocean by 3.4:1 in dark mode, against the 1.5:1 that the previous translucent-white fill managed; in light mode the geography is defined by a 3.4:1 coastline stroke rather than the fill. The darkening radial vignette that suppressed overall brightness has been removed.
 - **Global Calendar Ribbon:** A dynamic overarching native `<input type="date">` Ribbon initializing at the current Day spanning backwards structurally generating the temporal `get`/`lte` bounds scaling the global Database responses accurately across specific time spans.
-- **D3 Topographical Asset Map:** Built entirely upon `react-simple-maps` utilizing Azimuthal Equidistant mapping. Supports native pinch-to-zoom/pan logic and an external longitudinal pan-slider seamlessly re-mapping explicit TopoJSON layout structures.
+- **D3 Topographical Asset Map:** Rendered directly with `d3-geo` and `d3-zoom` (no wrapper library) on an **Equal Earth** projection. Equal Earth is equal-area, so each region occupies a fair share of the map — a Mercator-family projection would inflate Russia and Scandinavia while shrinking Africa, which misleads on a dashboard whose purpose is cross-region comparison. Supports pinch/scroll zoom, drag panning, and a longitude rotation slider that genuinely re-projects rather than translating. TopoJSON is served from the app's own origin, removing a runtime dependency on a third-party CDN.
+- **Marker Tooltips:** The hovered marker is re-ordered to paint last, and its tooltip is rendered in an HTML layer above the entire SVG, so a neighbouring flag can never overlap it — the failure mode in the dense Caribbean and Northern European clusters. Tooltips are fully opaque, sit above the flag by default, and flip below when the marker is close enough to the top edge to be clipped.
 - **Reactive Risk Rankings:** A live updating sidebar mapping current Ann. Volatility spreads actively incorporating semantic `Ascending/Descending` toggle sorting hooked directly into localized visual feedback statements conditionally explaining the resulting lists explicitly.
 - **Interactive Portfolio Optimizer:** Users choose four currencies through native `<select>` controls; the allocation is then solved rather than assumed. Weights are the **long-only minimum-variance solution** for the chosen holdings, derived from annualized volatility and the pairwise correlation matrix, so changing any holding re-solves every weight and the headline `Global Risk` figure. Duplicate holdings are blocked at the control level, and the opening selection is the lowest-risk combination discovered across the whole currency universe (see 3.4).
 

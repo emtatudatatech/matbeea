@@ -1,102 +1,19 @@
 "use client";
 
 import Image from 'next/image';
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
+import { useState, useEffect, useMemo } from 'react';
+import WorldMap from './components/WorldMap';
+import ThemeToggle from './components/ThemeToggle';
 import { lowestRiskAllocation, minimumVarianceAllocation, type AssetStats } from '@/lib/portfolio';
-
-// TopoJSON definition for the D3 Map implementation
-const geoUrl = "https://unpkg.com/world-atlas@2.0.2/countries-110m.json";
-
-// The 39 Major Global Currencies + USD Base mapped to EXACT Longitude/Latitude coordinates
-const CURRENCY_DICTIONARY: Record<string, { flag: string, coordinates: [number, number], name: string }> = {
-  // Africa
-  ZAR: { flag: 'za', coordinates: [24, -29], name: 'South Africa' },
-  NGN: { flag: 'ng', coordinates: [8, 9], name: 'Nigeria' },
-  EGP: { flag: 'eg', coordinates: [30, 26], name: 'Egypt' },
-  KES: { flag: 'ke', coordinates: [38, 1], name: 'Kenya' },
-  ZMW: { flag: 'zm', coordinates: [28, -13], name: 'Zambia' },
-  MAD: { flag: 'ma', coordinates: [-7, 31], name: 'Morocco' },
-  
-  // Asia
-  JPY: { flag: 'jp', coordinates: [138, 36], name: 'Japan' },
-  CNY: { flag: 'cn', coordinates: [104, 35], name: 'China' },
-  INR: { flag: 'in', coordinates: [78, 20], name: 'India' },
-  HKD: { flag: 'hk', coordinates: [114, 22], name: 'Hong Kong' },
-  KRW: { flag: 'kr', coordinates: [127, 35], name: 'South Korea' },
-  
-  // Europe
-  EUR: { flag: 'eu', coordinates: [10, 51], name: 'Eurozone' },
-  GBP: { flag: 'gb', coordinates: [-3, 55], name: 'Britain' },
-  CHF: { flag: 'ch', coordinates: [8, 46], name: 'Switzerland' },
-  SEK: { flag: 'se', coordinates: [15, 60], name: 'Sweden' },
-  RUB: { flag: 'ru', coordinates: [90, 60], name: 'Russia' },
-  NOK: { flag: 'no', coordinates: [8, 60], name: 'Norway' },
-  
-  // North/Central/Caribbean America
-  USD: { flag: 'us', coordinates: [-95, 37], name: 'United States' },
-  CAD: { flag: 'ca', coordinates: [-106, 56], name: 'Canada' },
-  MXN: { flag: 'mx', coordinates: [-102, 23], name: 'Mexico' },
-  GTQ: { flag: 'gt', coordinates: [-90, 15], name: 'Guatemala' },
-  CRC: { flag: 'cr', coordinates: [-83, 9], name: 'Costa Rica' },
-  PAB: { flag: 'pa', coordinates: [-80, 8], name: 'Panama' },
-  HNL: { flag: 'hn', coordinates: [-86, 15], name: 'Honduras' },
-  JMD: { flag: 'jm', coordinates: [-77, 18], name: 'Jamaica' },
-  DOP: { flag: 'do', coordinates: [-70, 18], name: 'Dom. Republic' },
-  TTD: { flag: 'tt', coordinates: [-61, 10], name: 'Trinidad/Tobago' },
-  XCD: { flag: 'lc', coordinates: [-61, 17], name: 'East Caribbean' },
-  BSD: { flag: 'bs', coordinates: [-77, 25], name: 'Bahamas' },
-  
-  // South America
-  BRL: { flag: 'br', coordinates: [-51, -14], name: 'Brazil' },
-  ARS: { flag: 'ar', coordinates: [-63, -38], name: 'Argentina' },
-  CLP: { flag: 'cl', coordinates: [-71, -35], name: 'Chile' },
-  COP: { flag: 'co', coordinates: [-74, 4], name: 'Colombia' },
-  PEN: { flag: 'pe', coordinates: [-75, -9], name: 'Peru' },
-  
-  // Oceania
-  AUD: { flag: 'au', coordinates: [133, -25], name: 'Australia' },
-  NZD: { flag: 'nz', coordinates: [174, -40], name: 'New Zealand' },
-  FJD: { flag: 'fj', coordinates: [179, -18], name: 'Fiji' },
-  PGK: { flag: 'pg', coordinates: [147, -6], name: 'Papua New Guinea' },
-  WST: { flag: 'ws', coordinates: [-171, -13], name: 'Samoa' }
-};
-
-// Tailwind v4 scans source files for complete class names, so risk colours cannot be
-// assembled as `text-${...}` at runtime — v4 also drops the JS config file that a
-// safelist used to live in. Each tone therefore maps to fully spelled-out classes.
-type RiskTone = 'green' | 'blue' | 'red';
-
-const RISK_TEXT: Record<RiskTone, string> = {
-  green: 'text-spotify-neonGreen',
-  blue: 'text-spotify-electricBlue',
-  red: 'text-spotify-crimson',
-};
-
-const RISK_BORDER: Record<RiskTone, string> = {
-  green: 'border-spotify-neonGreen',
-  blue: 'border-spotify-electricBlue',
-  red: 'border-spotify-crimson',
-};
-
-const RISK_BG: Record<RiskTone, string> = {
-  green: 'bg-spotify-neonGreen',
-  blue: 'bg-spotify-electricBlue',
-  red: 'bg-spotify-crimson',
-};
-
-// Quick-Check panel uses translucent variants of the same tones.
-const RISK_BORDER_SOFT: Record<RiskTone, string> = {
-  green: 'border-spotify-neonGreen/50',
-  blue: 'border-spotify-electricBlue/50',
-  red: 'border-spotify-crimson/50',
-};
-
-const RISK_BG_SOFT: Record<RiskTone, string> = {
-  green: 'bg-spotify-neonGreen/10',
-  blue: 'bg-spotify-electricBlue/10',
-  red: 'bg-spotify-crimson/10',
-};
+import {
+  CURRENCY_DICTIONARY,
+  getRiskTone,
+  RISK_BG,
+  RISK_BG_SOFT,
+  RISK_BORDER,
+  RISK_BORDER_SOFT,
+  RISK_TEXT,
+} from '@/lib/currencies';
 
 // Shape returned by /api/engine, mapped into the visual metric rows below.
 type EngineRanking = {
@@ -104,21 +21,19 @@ type EngineRanking = {
   volatility: number;
 };
 
-// react-simple-maps hands the render prop pre-projected TopoJSON features; only
-// the key is read here, so this captures just what the map actually consumes.
-type GeographyFeature = {
-  rsmKey: string;
-  [key: string]: unknown;
-};
-
 /** Number of currencies the optimizer allocates across. */
 const HOLDING_SLOTS = 4;
 
-// Categorical identity colours for the optimizer holdings. Deliberately separate
-// from the green/blue/red risk palette so a donut arc never reads as a risk
-// verdict. Validated against the #181818 chart surface for lightness band, chroma
-// floor, colour-vision-deficiency separation and contrast.
-const HOLDING_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
+// Categorical identity colours for the optimizer holdings, held deliberately
+// separate from the risk palette so a donut arc never reads as a risk verdict.
+// Each theme has its own validated steps; these resolve through CSS variables so
+// the chart follows the active theme.
+const HOLDING_COLORS = [
+  'var(--holding-1)',
+  'var(--holding-2)',
+  'var(--holding-3)',
+  'var(--holding-4)',
+];
 
 const cleanPairCode = (pair: string) => pair.replace('USD=X', '').replace('=X', '');
 
@@ -177,44 +92,20 @@ export default function Home() {
   const currentYear = new Date().getFullYear().toString();
   const today = new Date();
   const currentDateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  
+
   const [dateStart, setDateStart] = useState(`${currentYear}-01-01`);
   const [dateEnd, setDateEnd] = useState(currentDateStr);
-  
+
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [dbStatus, setDbStatus] = useState('Loading...');
-  
+
   // Interactive Optimizer selection. `null` means "follow the computed lowest-risk
   // default"; once the user picks a currency their choice survives date/base changes.
   const [selection, setSelection] = useState<string[] | null>(null);
 
   // UI States
   const [rankSort, setRankSort] = useState<'desc' | 'asc'>('desc');
-  
-  // Map Interactive Controls via react-simple-maps native handling
-  const [position, setPosition] = useState({ coordinates: [0, 0], zoom: 1 });
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    const mapEl = mapContainerRef.current;
-    if (!mapEl) return;
-    
-    // Aggressively trap wheel scale operations to stop standard browser zoom or dashboard scrolling
-    const blockGlobalZoom = (e: WheelEvent) => {
-      // Stop Safari/Chrome entire page scaling on trackpad pinch
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault(); 
-      }
-    };
-    
-    mapEl.addEventListener('wheel', blockGlobalZoom, { passive: false });
-    return () => mapEl.removeEventListener('wheel', blockGlobalZoom);
-  }, []);
-  
-  const handleMoveEnd = (position: {coordinates: [number, number], zoom: number}) => {
-     setPosition(position);
-  };
-  
+
   const [dataset, setDataset] = useState(() => buildMockDataset('USD'));
   const data = dataset.rows;
 
@@ -311,254 +202,130 @@ export default function Home() {
       .filter(segment => segment.dash > 0);
   }, [allocation]);
 
-  const getRiskTone = (volatility: number, isCorrelation: boolean = false): RiskTone => {
-    if (isCorrelation) {
-      if (Math.abs(volatility) < 0.3) return 'green'; // Highly uncorrelated = good for portfolio
-      if (Math.abs(volatility) <= 0.7) return 'blue';
-      return 'red';
-    }
-    if (volatility > 15) return 'red';
-    if (volatility > 8) return 'blue';
-    return 'green';
-  }
-
   const [qcCurrencyA, setQcCurrencyA] = useState('USD');
   const [qcCurrencyB, setQcCurrencyB] = useState('JPY');
-  
+
   const qcScore = qcCurrencyA === qcCurrencyB ? 1.0 : (data.find(d => d.pair === qcCurrencyB)?.r || data.find(d => d.pair === qcCurrencyA)?.r || -0.42);
   const qcTone = getRiskTone(qcScore, true);
 
   return (
-    <main className="flex flex-col items-center justify-start min-h-screen p-6 md:p-12 gap-8 text-spotify-foreground bg-spotify-dark">
+    <main className="flex flex-col items-center justify-start min-h-screen p-6 md:p-12 gap-8 text-ink bg-surface">
       {/* Navigation Header */}
-      <header className="sticky top-0 z-50 w-full flex items-center justify-between bg-spotify-charchoal/80 backdrop-blur-md p-4 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.5)] border border-gray-800">
+      <header className="sticky top-0 z-50 w-full flex flex-wrap items-center justify-between gap-4 bg-surface-raised/90 backdrop-blur-md p-4 rounded-2xl shadow-lg border border-edge">
         <h1 className="text-2xl font-black tracking-tighter flex items-center gap-2">
-          <span className="text-spotify-neonGreen text-3xl">⏣</span> <span className="hidden sm:inline">FX RISK DASHBOARD</span>
+          <span className="text-risk-low text-3xl">⏣</span> <span className="hidden sm:inline">FX RISK DASHBOARD</span>
         </h1>
-        <nav className="hidden xl:flex gap-8 text-sm font-bold text-gray-400">
-          <a href="#map" className="hover:text-white transition-colors uppercase tracking-wider">Global Map</a>
-          <a href="#rankings" className="hover:text-white transition-colors uppercase tracking-wider">Risk Rankings</a>
-          <a href="#optimizer" className="hover:text-white transition-colors uppercase tracking-wider">Optimizer</a>
-          <a href="#quickcheck" className="hover:text-white transition-colors uppercase tracking-wider">Pair Analysis</a>
+        <nav className="hidden xl:flex gap-8 text-sm font-bold text-ink-muted">
+          <a href="#map" className="hover:text-ink transition-colors uppercase tracking-wider">Global Map</a>
+          <a href="#rankings" className="hover:text-ink transition-colors uppercase tracking-wider">Risk Rankings</a>
+          <a href="#optimizer" className="hover:text-ink transition-colors uppercase tracking-wider">Optimizer</a>
+          <a href="#quickcheck" className="hover:text-ink transition-colors uppercase tracking-wider">Pair Analysis</a>
         </nav>
-        
-        <div className="flex gap-4 items-center">
+
+        <div className="flex gap-3 items-center">
           {/* Timeline Filter */}
-          <div className="hidden md:flex gap-2 items-center bg-black/40 px-3 py-1.5 rounded-lg border border-gray-800">
-             <label className="text-[10px] uppercase font-bold text-gray-500 mr-1">Range</label>
-             <input 
-               type="date" 
-               value={dateStart} 
+          <div className="hidden md:flex gap-2 items-center bg-surface-sunken px-3 py-1.5 rounded-lg border border-edge">
+             <label htmlFor="dateStart" className="text-[10px] uppercase font-bold text-ink-muted mr-1">Range</label>
+             <input
+               id="dateStart"
+               type="date"
+               value={dateStart}
                onChange={e => setDateStart(e.target.value)}
-               className="bg-transparent text-xs text-white outline-hidden cursor-pointer font-mono scheme-dark"
+               className="bg-transparent text-xs text-ink outline-hidden cursor-pointer font-mono"
               />
-             <span className="text-gray-600">-</span>
-             <input 
-               type="date" 
-               value={dateEnd} 
+             <span className="text-ink-faint">-</span>
+             <input
+               aria-label="Range end date"
+               type="date"
+               value={dateEnd}
                onChange={e => setDateEnd(e.target.value)}
-               className="bg-transparent text-xs text-white outline-hidden cursor-pointer font-mono scheme-dark"
+               className="bg-transparent text-xs text-ink outline-hidden cursor-pointer font-mono"
               />
           </div>
-          
+
           {/* Base Anchor Option */}
-          <label htmlFor="baseCurrency" className="text-xs uppercase tracking-widest font-black text-gray-500">Base Currency</label>
-          <select 
-            id="baseCurrency" 
+          <label htmlFor="baseCurrency" className="text-xs uppercase tracking-widest font-black text-ink-muted hidden lg:inline">Base</label>
+          <select
+            id="baseCurrency"
             value={baseCurrency}
             onChange={(e) => setBaseCurrency(e.target.value)}
-            className="bg-spotify-dark font-bold border border-gray-700 text-white rounded-lg px-4 py-2 outline-hidden focus:border-spotify-neonGreen focus:ring-1 focus:ring-spotify-neonGreen transition-all">
+            className="bg-surface-sunken font-bold border border-edge text-ink rounded-lg px-3 py-2 outline-hidden focus:border-risk-low focus:ring-1 focus:ring-risk-low transition-all">
             {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+
+          <ThemeToggle />
         </div>
       </header>
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-3 w-full gap-8">
-        
+
         {/* Map Section */}
-        <section className="xl:col-span-2 bg-spotify-charchoal rounded-3xl p-8 shadow-2xl border border-gray-800 relative z-10" id="map">
-          <div className="mb-6 flex justify-between items-center">
-            <h2 className="text-2xl font-bold tracking-tight">Global Correlation vs {baseCurrency} <span className="text-spotify-neonGreen ml-2 text-sm">{dbStatus}</span></h2>
-            <div className="text-xs text-gray-400 max-w-xs text-right">Azimuthal Equidistant Projection. Shows all 27 required markets.</div>
-          </div>
-          
-          <div 
-             ref={mapContainerRef} 
-             style={{ touchAction: 'none', overscrollBehavior: 'none' }}
-             className="w-full relative bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center p-0 aspect-video min-h-[500px]"
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-gray-900 via-[#0a0a0a] to-[#0a0a0a] opacity-80 pointer-events-none"></div>
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-size-[4rem_4rem] pointer-events-none"></div>
-            
-            {/* React Simple Maps Fully Integrated Composable Component */}
-            <ComposableMap projection="geoEquirectangular" projectionConfig={{ scale: 180, center: [0, 0] }} style={{ width: "100%", height: "100%" }}>
-              <ZoomableGroup center={position.coordinates as [number, number]} zoom={position.zoom} onMoveEnd={handleMoveEnd} maxZoom={10}>
-                <Geographies geography={geoUrl}>
-                  {({ geographies }: { geographies: GeographyFeature[] }) =>
-                    geographies.map((geo: GeographyFeature) => (
-                      <Geography 
-                        key={geo.rsmKey} 
-                        geography={geo} 
-                        fill="rgba(255,255,255,0.18)"
-                        stroke="rgba(255,255,255,0.3)" 
-                        style={{
-                          default: { outline: "none" },
-                          hover: { fill: "rgba(255,255,255,0.3)", outline: "none" },
-                          pressed: { outline: "none" }
-                        }}
-                      />
-                    ))
-                  }
-                </Geographies>
-
-                {Object.keys(CURRENCY_DICTIONARY).map((curcode) => {
-                   const info = CURRENCY_DICTIONARY[curcode];
-                   const mathData = data.find(d => d.pair === curcode);
-                   
-                   // If it's the base currency, force specific values, else use math data
-                   const isBase = curcode === baseCurrency;
-                   const borderColor = isBase ? 'border-white' : (mathData ? RISK_BORDER[getRiskTone(mathData.r, true)] : 'border-gray-500');
-                   const shadowColor = isBase ? 'rgba(255,255,255,0.5)' : (mathData ? (mathData.r < 0.3 ? 'rgba(29,185,84,0.5)' : (mathData.r > 0.7 ? 'rgba(255,77,79,0.5)' : 'rgba(24,144,255,0.5)')) : 'transparent');
-
-                   return (
-                     <Marker key={curcode} coordinates={info.coordinates}>
-                       {/* Master group container holding hover logic. It DOES NOT scale. */}
-                       <g className="cursor-pointer group">
-                         {/* 1. Invisible Static Hit Area. This NEVER moves, preventing all hover math thrashing/shaking */}
-                         <circle cx="0" cy="0" r="26" fill="transparent" className="pointer-events-auto" />
-                         
-                         {/* 2. The Flag Bubble - Scales strictly from center on group hover */}
-                         <g className="transform group-hover:scale-[1.8] transition-transform origin-center pointer-events-none">
-                           <foreignObject x={-14} y={-14} width={28} height={28} className="overflow-visible pointer-events-none">
-                             <div className={`relative w-7 h-7 rounded-full overflow-hidden border-2 ${borderColor}`} style={{boxShadow:`0 0 15px ${shadowColor}`}}>
-                               <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={info.name} fill className="object-cover" />
-                             </div>
-                           </foreignObject>
-                         </g>
-                         
-                         {/* 3. The Tooltip - Escapes boundaries using absolute and DOES NOT SCALE, keeping text legible & sharp */}
-                         <foreignObject x={-14} y={-14} width={28} height={28} className="overflow-visible pointer-events-none z-50">
-                           <div className="absolute bottom-8 left-1/2 mb-1 -translate-x-1/2 bg-spotify-dark border border-gray-700 p-2 rounded-lg shadow-[0_0_20px_rgba(0,0,0,0.8)] opacity-0 group-hover:opacity-100 transition-opacity w-44 pointer-events-none">
-                             <div className="font-bold border-b border-gray-800 pb-1 mb-1 text-[11px] font-sans tracking-wide">{info.name} <span className="text-gray-400 font-mono text-[10px] float-right mt-0.5">{curcode}</span></div>
-                             {isBase ? (
-                               <div className="text-[10px] text-center text-gray-500 py-1">Current Base Anchor</div>
-                             ) : (
-                               <>
-                                 <div className="text-[11px] flex justify-between"><span className="text-gray-400">Pearson:</span> <span className={`${RISK_TEXT[getRiskTone(mathData?.r || 0, true)]} font-mono font-bold`}>{mathData?.r}</span></div>
-                                 <div className="text-[11px] flex justify-between mt-0.5"><span className="text-gray-400">Volatilty:</span> <span className={`${RISK_TEXT[getRiskTone(mathData?.vol || 0)]} font-mono`}>{mathData?.vol}%</span></div>
-                               </>
-                             )}
-                           </div>
-                         </foreignObject>
-                       </g>
-                     </Marker>
-                   );
-                })}
-              </ZoomableGroup>
-            </ComposableMap>
-          </div>
-
-          {/* Map Interaction Controls & Explainer */}
-          <div className="mt-6 flex flex-col gap-4 bg-black/40 p-5 rounded-2xl border border-gray-800">
-             
-             {/* Slider & Actions */}
-             <div className="w-full flex flex-col md:flex-row items-center justify-between gap-6 border-b border-gray-800/60 pb-5">
-                 
-                 <div className="flex items-center gap-3 w-full md:w-1/2 bg-spotify-dark/50 px-4 py-2 rounded-lg border border-gray-800/80">
-                     <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-tight whitespace-nowrap">Pan Longitude</span>
-                     <input 
-                        type="range" 
-                        min="-180" 
-                        max="180" 
-                        step="1"
-                        value={position.coordinates[0]}
-                        onChange={(e) => setPosition({ ...position, coordinates: [parseFloat(e.target.value), position.coordinates[1]] as [number, number] })}
-                        className="w-full accent-spotify-neonGreen h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer"
-                     />
-                     <span className="text-[10px] font-mono text-gray-400 w-8 text-right bg-black/50 px-1 py-0.5 rounded-sm">{position.coordinates[0].toFixed(0)}°</span>
-                 </div>
-                 
-                 <div className="flex items-center gap-4 w-full md:w-auto justify-end">
-                    <div className="text-spotify-neonGreen font-mono font-bold text-sm text-right bg-spotify-dark/50 px-3 py-1.5 rounded-lg border border-gray-800/80">z {position.zoom.toFixed(1)}x</div>
-                    <button onClick={() => {setPosition({coordinates: [0,0], zoom: 1});}} className="text-[10px] bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 outline-hidden rounded-lg uppercase tracking-wider font-bold transition-colors shadow-lg">Recenter Map</button>
-                 </div>
-             </div>
-             
-             {/* Financial Metrics Explainer */}
-             <div className="pt-1">
-               <p className="text-[11.5px] text-gray-400 leading-relaxed font-medium">
-                 <strong className="text-spotify-neonGreen uppercase tracking-widest font-black mr-1.5">Pearson Correlation (r):</strong> 
-                 Measures the linear alignment between a currency and your Base Anchor. Ranges from <span className="text-white font-mono">-1.0</span> (perfect inverse movement) to <span className="text-white font-mono">1.0</span> (perfect lockstep). Values near 0 indicate low statistical correlation, offering strong diversification resilience.
-                 <br/>
-                 <strong className="text-spotify-electricBlue uppercase tracking-widest font-black mr-1.5 mt-2 inline-block">Volatility (σ):</strong> 
-                 The annualized standard deviation of daily returns. Higher percentages indicate dramatic price fluctuations and amplified exposure risk relative to the Base Anchor.
-               </p>
-             </div>
-          </div>
+        <section className="xl:col-span-2 bg-surface-raised rounded-3xl p-8 shadow-lg border border-edge relative z-10" id="map">
+          <WorldMap metrics={data} baseCurrency={baseCurrency} statusLabel={dbStatus} />
         </section>
-        
+
         {/* Risk Rankings Side Panel */}
-        <section className="bg-spotify-charchoal rounded-3xl p-8 shadow-2xl border border-gray-800 overflow-hidden flex flex-col" id="rankings">
-          <div className="flex justify-between items-start mb-3">
-             <h2 className="text-xl font-bold tracking-tight">Risk Rankings <span className="block text-sm text-gray-400 font-normal mt-1">Ann. Volatility Spread (&sigma;) for all 27</span></h2>
-             <button onClick={() => setRankSort(prev => prev === 'desc' ? 'asc' : 'desc')} className="text-[10px] font-bold text-gray-400 bg-black/40 hover:bg-gray-800 px-3 py-2 rounded-lg uppercase tracking-wider transition-colors border border-gray-800 hover:text-white flex items-center shadow-md">
+        <section className="bg-surface-raised rounded-3xl p-8 shadow-lg border border-edge overflow-hidden flex flex-col" id="rankings">
+          <div className="flex justify-between items-start mb-3 gap-3">
+             <h2 className="text-xl font-bold tracking-tight">Risk Rankings <span className="block text-sm text-ink-muted font-normal mt-1">Ann. Volatility Spread (&sigma;) for all {data.length}</span></h2>
+             <button onClick={() => setRankSort(prev => prev === 'desc' ? 'asc' : 'desc')} className="text-[10px] font-bold text-ink-muted bg-surface-sunken hover:bg-surface px-3 py-2 rounded-lg uppercase tracking-wider transition-colors border border-edge hover:text-ink flex items-center shadow-sm shrink-0">
                Sort: {rankSort === 'desc' ? 'Highest First ↓' : 'Lowest First ↑'}
              </button>
           </div>
-          
-          <p className="text-[11px] text-gray-500 mb-5 bg-black/20 p-3 rounded-lg border border-gray-800/50 leading-relaxed font-medium">
-             {rankSort === 'desc' 
-                 ? 'Displaying the most highly volatile currencies at the top, descending to the most stable base-pegged anchors at the bottom.' 
+
+          <p className="text-[11px] text-ink-muted mb-5 bg-surface-sunken p-3 rounded-lg border border-edge leading-relaxed font-medium">
+             {rankSort === 'desc'
+                 ? 'Displaying the most highly volatile currencies at the top, descending to the most stable base-pegged anchors at the bottom.'
                  : 'Displaying the most stable, low-volatility currencies at the top, ascending to the highest risk assets.'}
           </p>
-          
-          <div className="flex flex-col gap-4 overflow-y-auto pr-2 pb-4 hover:scrollbar-thin" style={{maxHeight: '500px'}}>
-            {[...data].sort((a,b) => rankSort === 'desc' ? b.vol - a.vol : a.vol - b.vol).slice(0, 27).map((metric, i) => {
+
+          <div className="flex flex-col gap-4 overflow-y-auto pr-2 pb-4" style={{maxHeight: '500px'}}>
+            {[...data].sort((a,b) => rankSort === 'desc' ? b.vol - a.vol : a.vol - b.vol).map((metric, i) => {
               const info = CURRENCY_DICTIONARY[metric.pair];
               if (!info) return null;
               const color = RISK_BG[getRiskTone(metric.vol)];
-              
+
               return (
-              <div key={i} className="flex items-center justify-between bg-spotify-dark/50 p-3 rounded-xl border border-gray-800/50 hover:bg-gray-800/50 transition-colors">
+              <div key={i} className="flex items-center justify-between bg-surface-sunken p-3 rounded-xl border border-edge hover:border-edge-strong transition-colors">
                 <div className="flex items-center gap-3 w-1/3">
-                  <span className="text-xs font-black text-gray-500 w-4">{i+1}</span>
+                  <span className="text-xs font-black text-ink-faint w-4">{i+1}</span>
                   <div className="relative group cursor-pointer">
                     <div className="relative w-6 h-6 rounded-full overflow-hidden shadow-xs">
-                       <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={metric.pair} fill className="object-cover" />
+                       <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={metric.pair} fill sizes="24px" className="object-cover" />
                     </div>
                     {/* Tooltip dynamically shooting right to explicitly prevent #1 list-item vertical container clipping */}
-                    <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-gray-900 border border-gray-700 px-3 py-1.5 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 flex flex-col items-start min-w-max">
-                       <span className="text-[11px] font-bold text-white whitespace-nowrap leading-tight">{info.name}</span>
-                       <span className="text-[9px] font-mono text-spotify-neonGreen uppercase tracking-widest">{metric.pair}</span>
+                    <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-surface-raised border border-edge-strong px-3 py-1.5 rounded-lg shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 flex flex-col items-start min-w-max">
+                       <span className="text-[11px] font-bold text-ink whitespace-nowrap leading-tight">{info.name}</span>
+                       <span className="text-[9px] font-mono text-risk-low uppercase tracking-widest">{metric.pair}</span>
                     </div>
                   </div>
                   <span className="font-bold text-sm">{metric.pair}</span>
                 </div>
                 <div className="flex-1 px-4">
-                  <div className="w-full bg-black rounded-full h-2 overflow-hidden border border-gray-800">
-                    <div className={`h-full ${color} rounded-r-full shadow-[0_0_10px_currentColor]`} style={{width: `${Math.min(metric.vol * 4, 100)}%`}}></div>
+                  <div className="w-full bg-surface rounded-full h-2 overflow-hidden border border-edge">
+                    <div className={`h-full ${color} rounded-r-full`} style={{width: `${Math.min(metric.vol * 4, 100)}%`}}></div>
                   </div>
                 </div>
-                <span className="text-xs font-mono text-gray-300 w-12 text-right">{metric.vol}%</span>
+                <span className="text-xs font-mono text-ink-muted w-12 text-right">{metric.vol}%</span>
               </div>
             )})}
           </div>
         </section>
 
         {/* Portfolio Optimizer */}
-        <section className="xl:col-span-2 bg-spotify-charchoal rounded-3xl p-8 shadow-2xl border border-gray-800" id="optimizer">
+        <section className="xl:col-span-2 bg-surface-raised rounded-3xl p-8 shadow-lg border border-edge" id="optimizer">
           <div className="flex flex-wrap justify-between items-start gap-3 mb-2">
             <h2 className="text-xl font-bold tracking-tight">Portfolio Variance Optimizer</h2>
             <button
               onClick={() => setSelection(null)}
               disabled={selection === null}
-              className="text-[10px] font-bold text-gray-400 bg-black/40 hover:bg-gray-800 hover:text-white px-3 py-2 rounded-lg uppercase tracking-wider transition-colors border border-gray-800 shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-black/40 disabled:hover:text-gray-400"
+              className="text-[10px] font-bold text-ink-muted bg-surface-sunken hover:bg-surface hover:text-ink px-3 py-2 rounded-lg uppercase tracking-wider transition-colors border border-edge shadow-sm disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-surface-sunken disabled:hover:text-ink-muted"
             >
               Reset to lowest risk
             </button>
           </div>
-          <p className="text-gray-400 text-sm mb-6 max-w-2xl">
+          <p className="text-ink-muted text-sm mb-6 max-w-2xl">
             Weights are the long-only minimum-variance solution for whichever four currencies you
             hold, computed from their annualized volatility and the correlations between them —
             change a holding and every weight re-solves. The starting selection is the lowest-risk
@@ -566,14 +333,14 @@ export default function Home() {
           </p>
 
           {allocation.codes.length === 0 ? (
-            <div className="bg-spotify-dark p-8 rounded-2xl border border-gray-800/50 text-center text-sm text-gray-500">
+            <div className="bg-surface-sunken p-8 rounded-2xl border border-edge text-center text-sm text-ink-muted">
               Waiting for market data before the optimizer can solve.
             </div>
           ) : (
-          <div className="flex flex-col md:flex-row items-center gap-12 bg-spotify-dark p-8 rounded-2xl border border-gray-800/50">
+          <div className="flex flex-col md:flex-row items-center gap-12 bg-surface-sunken p-8 rounded-2xl border border-edge">
              {/* Donut Chart — part-to-whole of the allocation, at a glance; the exact
                  figures live on the labelled cards beside it. */}
-             <div className="relative w-48 h-48 shrink-0 rounded-full border-16 border-spotify-dark shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] bg-spotify-charchoal flex items-center justify-center">
+             <div className="relative w-48 h-48 shrink-0 rounded-full border-16 border-surface-sunken shadow-inner bg-surface-raised flex items-center justify-center">
                 <svg className="absolute inset-0 w-full h-full -rotate-90" aria-hidden="true">
                    {donutSegments.map(segment => (
                      <circle
@@ -591,9 +358,9 @@ export default function Home() {
                    ))}
                 </svg>
                 <div className="text-center">
-                  <div className="text-xs text-gray-500 uppercase font-bold tracking-widest">Global Risk</div>
-                  <div className="text-3xl font-black text-white">{allocation.volatility.toFixed(1)}%</div>
-                  <div className="text-[10px] text-gray-500 font-medium">annualized &sigma;</div>
+                  <div className="text-xs text-ink-muted uppercase font-bold tracking-widest">Global Risk</div>
+                  <div className="text-3xl font-black text-ink">{allocation.volatility.toFixed(1)}%</div>
+                  <div className="text-[10px] text-ink-faint font-medium">annualized &sigma;</div>
                 </div>
              </div>
 
@@ -602,13 +369,13 @@ export default function Home() {
                 {allocation.codes.map((code, index) => {
                   const info = CURRENCY_DICTIONARY[code];
                   return (
-                    <div key={index} className="bg-black/40 p-4 rounded-xl border border-gray-800 hover:border-gray-500 transition-colors">
+                    <div key={index} className="bg-surface-raised p-4 rounded-xl border border-edge hover:border-edge-strong transition-colors">
                       <div className="flex items-center gap-2 mb-1 min-w-0">
                         <span
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: HOLDING_COLORS[index % HOLDING_COLORS.length] }}
                         />
-                        <span className="text-xs text-gray-500 truncate">
+                        <span className="text-xs text-ink-muted truncate">
                           Holding {index + 1}{info ? ` · ${info.name}` : ''}
                         </span>
                       </div>
@@ -617,20 +384,19 @@ export default function Home() {
                           value={code}
                           aria-label={`Holding ${index + 1} currency`}
                           onChange={(e) => handleHoldingChange(index, e.target.value)}
-                          className="font-bold text-lg text-white bg-transparent outline-hidden cursor-pointer appearance-none w-24"
+                          className="font-bold text-lg text-ink bg-transparent outline-hidden cursor-pointer appearance-none w-24"
                         >
                           {optimizerUniverse.map(option => (
                             <option
                               key={option}
                               value={option}
                               disabled={option !== code && holdings.includes(option)}
-                              className="bg-spotify-dark text-white"
                             >
                               {option}
                             </option>
                           ))}
                         </select>
-                        <span className="font-mono text-xl text-white">{(allocation.weights[index] * 100).toFixed(1)}%</span>
+                        <span className="font-mono text-xl text-ink">{(allocation.weights[index] * 100).toFixed(1)}%</span>
                       </div>
                     </div>
                   );
@@ -641,23 +407,25 @@ export default function Home() {
         </section>
 
         {/* Pair Quick Check */}
-        <section className="bg-spotify-charchoal rounded-3xl p-8 shadow-2xl border border-gray-800 flex flex-col justify-between" id="quickcheck">
+        <section className="bg-surface-raised rounded-3xl p-8 shadow-lg border border-edge flex flex-col justify-between" id="quickcheck">
           <div>
             <h2 className="text-xl font-bold mb-6 tracking-tight">Correlation Quick-Check</h2>
-            <div className="flex justify-between items-center bg-spotify-dark p-2 rounded-xl mb-6 border border-gray-700 w-full relative">
-               <select className="bg-transparent text-white font-bold p-3 outline-hidden flex-1 appearance-none cursor-pointer"
+            <div className="flex justify-between items-center bg-surface-sunken p-2 rounded-xl mb-6 border border-edge w-full relative">
+               <select className="bg-transparent text-ink font-bold p-3 outline-hidden flex-1 appearance-none cursor-pointer"
+                       aria-label="Quick-check currency A"
                        value={qcCurrencyA} onChange={(e) => setQcCurrencyA(e.target.value)}>
                  {Object.keys(CURRENCY_DICTIONARY).map(c => <option key={c} value={c}>{c}</option>)}
                </select>
-               <span className="text-gray-500 text-lg mr-2 font-black pointer-events-none">↔</span>
-               <select className="bg-transparent text-white font-bold p-3 outline-hidden flex-1 appearance-none cursor-pointer text-right" 
+               <span className="text-ink-faint text-lg mr-2 font-black pointer-events-none">↔</span>
+               <select className="bg-transparent text-ink font-bold p-3 outline-hidden flex-1 appearance-none cursor-pointer text-right"
+                       aria-label="Quick-check currency B"
                        value={qcCurrencyB} onChange={(e) => setQcCurrencyB(e.target.value)}>
                  {Object.keys(CURRENCY_DICTIONARY).map(c => <option key={c} value={c}>{c}</option>)}
                </select>
             </div>
-            
-            <div className={`bg-[#0a0a0a] rounded-2xl p-6 text-center border-2 ${RISK_BORDER[qcTone]} shadow-[0_0_20px_currentColor] mt-auto`}>
-               <div className="text-sm text-gray-400 font-bold uppercase tracking-widest mb-1">Pearson Score (r)</div>
+
+            <div className={`bg-surface-sunken rounded-2xl p-6 text-center border-2 ${RISK_BORDER[qcTone]} mt-auto`}>
+               <div className="text-sm text-ink-muted font-bold uppercase tracking-widest mb-1">Pearson Score (r)</div>
                <div className={`text-5xl font-black ${RISK_TEXT[qcTone]} font-mono mb-2`}>{qcScore}</div>
                <div className={`${RISK_TEXT[qcTone]} ${RISK_BG_SOFT[qcTone]} inline-block px-3 py-1 rounded-full text-xs font-bold border ${RISK_BORDER_SOFT[qcTone]}`}>
                  {Math.abs(qcScore) < 0.3 ? 'LOW RISK SHIELD' : (Math.abs(qcScore) <= 0.7 ? 'MODERATE LINK' : 'HEAVY CORRELATION')}
