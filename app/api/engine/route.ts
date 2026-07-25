@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import prisma from '@/prisma/client';
 import { sampleCorrelation, standardDeviation } from 'simple-statistics';
 
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
     const endStr = searchParams.get('end');
     
     // Construct Prisma dynamic where constraints based on calendar parameters
-    const whereClause: any = {};
+    const whereClause: Prisma.FxDailyPriceWhereInput = {};
     if (startStr && endStr) {
        whereClause.date = {
           gte: new Date(startStr),
@@ -105,7 +106,7 @@ export async function GET(request: Request) {
           try {
              const r = sampleCorrelation(alignedData[basePair], alignedData[pair]);
              correlations[pair] = Number.isNaN(r) ? 0 : r;
-          } catch (e) {
+          } catch {
              correlations[pair] = 0; // fallback gracefully
           }
         }

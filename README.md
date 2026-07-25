@@ -12,11 +12,18 @@ A secure, high-performance Full-Stack Application built with **Next.js (App Rout
 
 ## Architecture
 
-- **Frontend**: Next.js 15, React 19, TailwindCSS 3 
+- **Frontend**: Next.js 16, React 19, TailwindCSS 4 
 - **Backend / APIs**: Next.js Server Components / Endpoints + Netlify Scheduled Functions
-- **Database Layer**: Neon Serverless Postgres + Prisma Client ORM
-- **Market Sourcing**: Yahoo Finance v3 (`chart()` Engine)
+- **Database Layer**: Neon Serverless Postgres + Prisma 7 Client ORM (via the `@prisma/adapter-neon` driver adapter)
+- **Market Sourcing**: Yahoo Finance v4 (`chart()` Engine)
 - **Geographic Mapping**: `react-simple-maps` (D3 & TopoJSON)
+
+### Toolchain Notes
+
+- **Tailwind CSS 4** is configured CSS-first: the palette lives in an `@theme` block inside `app/globals.css` and `tailwind.config.ts` no longer exists. PostCSS loads `@tailwindcss/postcss` (autoprefixer is now built in). Because v4 resolves only complete class names at build time, risk colours are looked up through the static `RISK_*` maps in `app/page.tsx` rather than being interpolated.
+- **Prisma 7** no longer accepts `url` inside `schema.prisma`. The CLI reads the connection string from `prisma.config.ts`, while the runtime client is constructed with a Neon driver adapter in `prisma/client.ts`.
+- **Linting** runs through the `eslint` CLI against the flat config in `eslint.config.mjs`; `next lint` was removed in Next 16.
+- **Pinned deliberately**: `typescript` stays on 6.x and `eslint` on 9.x. TypeScript 7 is not yet supported by Next 16's type checker or by `typescript-eslint`, and ESLint 10 is not yet supported by `eslint-plugin-react` (pulled in via `eslint-config-next`). Both should be revisited once upstream support lands.
 
 ## Covered Currencies 
 
@@ -27,10 +34,11 @@ The database ingests standard currency combinations indexed against USD (`*=USD=
 - **Africa**: `ZAR`, `NGN`, `EGP`, `KES`, `ZMW`, `MAD`
 
 ## Local Data Initialization
-Before developing, configure an `.env.local` pointing securely to your Neon instance.
+Before developing, configure an `.env.local` pointing securely to your Neon instance. `DATABASE_URL` is
+mandatory — `prisma/client.ts` fails fast with an explanatory error when it is absent.
 
 ```bash
-# Push Prisma Schema Structure
+# Push Prisma Schema Structure (reads DATABASE_URL via prisma.config.ts)
 npx prisma db push
 
 # Generate Prisma Client (crucial for local/Netlify)
@@ -38,6 +46,10 @@ npx prisma generate
 
 # Test Dev UI
 npm run dev
+
+# Typecheck and lint
+npx tsc --noEmit
+npm run lint
 ```
 
 ## Netlify Deployment 

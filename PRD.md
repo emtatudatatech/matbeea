@@ -6,14 +6,24 @@
 The Global FX Risk & Correlation Dashboard is a high-performance financial analytics tool designed to assess and visualize daily volatility and correlation shifts across major global currencies. The primary goal is to help users algorithmically evaluate risk spreads and identify mathematically optimal portfolio diversification opportunities (minimum variance pairs).
 
 ## 2. Architecture & Technology Stack
-- **Frontend Framework:** Next.js 15 (App Router), React 19
-- **Design System:** Tailwind CSS v3 (Customized Spotify-style dark theme)
+- **Frontend Framework:** Next.js 16 (App Router), React 19
+- **Design System:** Tailwind CSS v4 (Customized Spotify-style dark theme, CSS-first `@theme` configuration)
 - **Database:** Neon Serverless PostgreSQL
-- **ORM:** Prisma v5 
-- **Data Ingestion API:** `yahoo-finance2` (v3 `chart()` spec)
+- **ORM:** Prisma v7 (driver-adapter mode via `@prisma/adapter-neon` + `@neondatabase/serverless`)
+- **Data Ingestion API:** `yahoo-finance2` (v4 `chart()` spec)
 - **Math Engine:** `simple-statistics` (Pearson Coefficient, Standard Deviation)
 - **Deployment Platform:** Netlify (Edge caching & Cron Scheduled Functions)
 - **Geographic Modeling:** `react-simple-maps` (D3/TopoJSON projection)
+- **Tooling:** TypeScript 6.x, ESLint 9.x flat config (`eslint.config.mjs`)
+
+### 2.1. Dependency Modernization (July 2026)
+A full dependency refresh moved every package to its latest usable release:
+- **Next.js 16.2.2 → 16.2.11, React 19.2.4 → 19.2.8** alongside matching type packages.
+- **Tailwind CSS 3.4 → 4.3:** `tailwind.config.ts` was removed in favour of an `@theme` block in `app/globals.css`; PostCSS now loads `@tailwindcss/postcss` and autoprefixer was dropped. Runtime-interpolated colour classes (`text-${...}`) were replaced with static `RISK_TEXT` / `RISK_BORDER` / `RISK_BG` lookup maps, because v4 only emits utilities whose complete class names appear in source.
+- **Prisma 5.22 → 7.9:** the datasource `url` moved out of `schema.prisma` into a new `prisma.config.ts`, and `PrismaClient` is now instantiated with the Neon driver adapter (WebSocket transport, better suited to scale-to-zero serverless invocations than raw TCP).
+- **yahoo-finance2 3.14 → 4.0:** the `chart()` contract is unchanged, so the ingestion function needed no rewrite.
+- **`next lint` removal:** Next 16 dropped the command; linting now runs `eslint .` against a flat config.
+- **Deliberate pins:** TypeScript remains on 6.x (Next 16's type checker and `typescript-eslint` both reject TS 7.0) and ESLint on 9.x (`eslint-plugin-react`, a transitive dependency of `eslint-config-next`, has no ESLint 10 release). Revisit when upstream support ships.
 
 ## 3. Core Features (Implemented)
 

@@ -61,6 +61,55 @@ const CURRENCY_DICTIONARY: Record<string, { flag: string, coordinates: [number, 
   WST: { flag: 'ws', coordinates: [-171, -13], name: 'Samoa' }
 };
 
+// Tailwind v4 scans source files for complete class names, so risk colours cannot be
+// assembled as `text-${...}` at runtime — v4 also drops the JS config file that a
+// safelist used to live in. Each tone therefore maps to fully spelled-out classes.
+type RiskTone = 'green' | 'blue' | 'red';
+
+const RISK_TEXT: Record<RiskTone, string> = {
+  green: 'text-spotify-neonGreen',
+  blue: 'text-spotify-electricBlue',
+  red: 'text-spotify-crimson',
+};
+
+const RISK_BORDER: Record<RiskTone, string> = {
+  green: 'border-spotify-neonGreen',
+  blue: 'border-spotify-electricBlue',
+  red: 'border-spotify-crimson',
+};
+
+const RISK_BG: Record<RiskTone, string> = {
+  green: 'bg-spotify-neonGreen',
+  blue: 'bg-spotify-electricBlue',
+  red: 'bg-spotify-crimson',
+};
+
+// Quick-Check panel uses translucent variants of the same tones.
+const RISK_BORDER_SOFT: Record<RiskTone, string> = {
+  green: 'border-spotify-neonGreen/50',
+  blue: 'border-spotify-electricBlue/50',
+  red: 'border-spotify-crimson/50',
+};
+
+const RISK_BG_SOFT: Record<RiskTone, string> = {
+  green: 'bg-spotify-neonGreen/10',
+  blue: 'bg-spotify-electricBlue/10',
+  red: 'bg-spotify-crimson/10',
+};
+
+// Shape returned by /api/engine, mapped into the visual metric rows below.
+type EngineRanking = {
+  pair: string;
+  volatility: number;
+};
+
+// react-simple-maps hands the render prop pre-projected TopoJSON features; only
+// the key is read here, so this captures just what the map actually consumes.
+type GeographyFeature = {
+  rsmKey: string;
+  [key: string]: unknown;
+};
+
 export default function Home() {
   const currentYear = new Date().getFullYear().toString();
   const today = new Date();
@@ -129,7 +178,7 @@ export default function Home() {
          } else {
            setDbStatus('● LIVE from Neon Postgres');
            // Convert actual API to visual array map
-           const mapped = res.riskRankings.map((r: any) => {
+           const mapped = res.riskRankings.map((r: EngineRanking) => {
               const cleanedPair = r.pair.replace('USD=X', '').replace('=X', '');
               return {
                  pair: cleanedPair,
@@ -139,46 +188,28 @@ export default function Home() {
            });
            setData(mapped);
          }
-       }).catch((e) => {
+       }).catch(() => {
          setDbStatus('Local DB Error - Showing Generated Plot');
          setData(generateMockData(baseCurrency));
        });
   }, [baseCurrency, dateStart, dateEnd]);
 
-  const getRiskColor = (volatility: number, isCorrelation: boolean = false) => {
+  const getRiskTone = (volatility: number, isCorrelation: boolean = false): RiskTone => {
     if (isCorrelation) {
-      if (Math.abs(volatility) < 0.3) return 'spotify-neonGreen'; // Highly uncorrelated = good for portfolio
-      if (Math.abs(volatility) <= 0.7) return 'spotify-electricBlue';
-      return 'spotify-crimson';
+      if (Math.abs(volatility) < 0.3) return 'green'; // Highly uncorrelated = good for portfolio
+      if (Math.abs(volatility) <= 0.7) return 'blue';
+      return 'red';
     }
-    if (volatility > 15) return 'spotify-crimson';
-    if (volatility > 8) return 'spotify-electricBlue';
-    return 'spotify-neonGreen';
+    if (volatility > 15) return 'red';
+    if (volatility > 8) return 'blue';
+    return 'green';
   }
-  
-  // Simulated Component Heuristic Formula
-  const calculateGlobalRisk = () => {
-     if (data.length === 0) return "4.2";
-     const getM = (sym: string) => data.find(d => d.pair === sym) || { vol: 8.0, r: 0.2 };
-     const mA = getM(optA); const mB = getM(optB); const mC = getM(optC); const mD = getM(optD);
-     
-     // Weighted variance formula integrating individual correlation scalars against local volatility 
-     const riskRaw = (
-       (mA.vol * 0.45 * (1 + mA.r)) + 
-       (mB.vol * 0.30 * (1 + mB.r)) + 
-       (mC.vol * 0.05 * (1 + mC.r)) + 
-       (mD.vol * 0.20 * (1 + Math.abs(mD.r))) 
-     ) * 0.45;
-     
-     return Math.max(1.2, riskRaw).toFixed(1);
-  };
-  const simulatedGlobalRisk = calculateGlobalRisk();
 
   const [qcCurrencyA, setQcCurrencyA] = useState('USD');
   const [qcCurrencyB, setQcCurrencyB] = useState('JPY');
   
   const qcScore = qcCurrencyA === qcCurrencyB ? 1.0 : (data.find(d => d.pair === qcCurrencyB)?.r || data.find(d => d.pair === qcCurrencyA)?.r || -0.42);
-  const qcColor = getRiskColor(qcScore, true);
+  const qcTone = getRiskTone(qcScore, true);
 
   return (
     <main className="flex flex-col items-center justify-start min-h-screen p-6 md:p-12 gap-8 text-spotify-foreground bg-spotify-dark">
@@ -202,14 +233,14 @@ export default function Home() {
                type="date" 
                value={dateStart} 
                onChange={e => setDateStart(e.target.value)}
-               className="bg-transparent text-xs text-white outline-none cursor-pointer font-mono [color-scheme:dark]"
+               className="bg-transparent text-xs text-white outline-hidden cursor-pointer font-mono scheme-dark"
               />
              <span className="text-gray-600">-</span>
              <input 
                type="date" 
                value={dateEnd} 
                onChange={e => setDateEnd(e.target.value)}
-               className="bg-transparent text-xs text-white outline-none cursor-pointer font-mono [color-scheme:dark]"
+               className="bg-transparent text-xs text-white outline-hidden cursor-pointer font-mono scheme-dark"
               />
           </div>
           
@@ -219,7 +250,7 @@ export default function Home() {
             id="baseCurrency" 
             value={baseCurrency}
             onChange={(e) => setBaseCurrency(e.target.value)}
-            className="bg-spotify-dark font-bold border border-gray-700 text-white rounded-lg px-4 py-2 outline-none focus:border-spotify-neonGreen focus:ring-1 focus:ring-spotify-neonGreen transition-all">
+            className="bg-spotify-dark font-bold border border-gray-700 text-white rounded-lg px-4 py-2 outline-hidden focus:border-spotify-neonGreen focus:ring-1 focus:ring-spotify-neonGreen transition-all">
             {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
@@ -240,15 +271,15 @@ export default function Home() {
              style={{ touchAction: 'none', overscrollBehavior: 'none' }}
              className="w-full relative bg-[#0a0a0a] border border-gray-800 rounded-2xl overflow-hidden shadow-inner flex items-center justify-center p-0 aspect-video min-h-[500px]"
           >
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-[#0a0a0a] to-[#0a0a0a] opacity-80 pointer-events-none"></div>
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] pointer-events-none"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,var(--tw-gradient-stops))] from-gray-900 via-[#0a0a0a] to-[#0a0a0a] opacity-80 pointer-events-none"></div>
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-size-[4rem_4rem] pointer-events-none"></div>
             
             {/* React Simple Maps Fully Integrated Composable Component */}
             <ComposableMap projection="geoEquirectangular" projectionConfig={{ scale: 180, center: [0, 0] }} style={{ width: "100%", height: "100%" }}>
               <ZoomableGroup center={position.coordinates as [number, number]} zoom={position.zoom} onMoveEnd={handleMoveEnd} maxZoom={10}>
                 <Geographies geography={geoUrl}>
-                  {({ geographies }: { geographies: any[] }) =>
-                    geographies.map((geo: any) => (
+                  {({ geographies }: { geographies: GeographyFeature[] }) =>
+                    geographies.map((geo: GeographyFeature) => (
                       <Geography 
                         key={geo.rsmKey} 
                         geography={geo} 
@@ -270,7 +301,7 @@ export default function Home() {
                    
                    // If it's the base currency, force specific values, else use math data
                    const isBase = curcode === baseCurrency;
-                   const borderColor = isBase ? 'border-white' : (mathData ? `border-${getRiskColor(mathData.r, true)}` : 'border-gray-500');
+                   const borderColor = isBase ? 'border-white' : (mathData ? RISK_BORDER[getRiskTone(mathData.r, true)] : 'border-gray-500');
                    const shadowColor = isBase ? 'rgba(255,255,255,0.5)' : (mathData ? (mathData.r < 0.3 ? 'rgba(29,185,84,0.5)' : (mathData.r > 0.7 ? 'rgba(255,77,79,0.5)' : 'rgba(24,144,255,0.5)')) : 'transparent');
 
                    return (
@@ -297,8 +328,8 @@ export default function Home() {
                                <div className="text-[10px] text-center text-gray-500 py-1">Current Base Anchor</div>
                              ) : (
                                <>
-                                 <div className="text-[11px] flex justify-between"><span className="text-gray-400">Pearson:</span> <span className={`text-${getRiskColor(mathData?.r || 0, true)} font-mono font-bold`}>{mathData?.r}</span></div>
-                                 <div className="text-[11px] flex justify-between mt-0.5"><span className="text-gray-400">Volatilty:</span> <span className={`text-${getRiskColor(mathData?.vol || 0)} font-mono`}>{mathData?.vol}%</span></div>
+                                 <div className="text-[11px] flex justify-between"><span className="text-gray-400">Pearson:</span> <span className={`${RISK_TEXT[getRiskTone(mathData?.r || 0, true)]} font-mono font-bold`}>{mathData?.r}</span></div>
+                                 <div className="text-[11px] flex justify-between mt-0.5"><span className="text-gray-400">Volatilty:</span> <span className={`${RISK_TEXT[getRiskTone(mathData?.vol || 0)]} font-mono`}>{mathData?.vol}%</span></div>
                                </>
                              )}
                            </div>
@@ -328,12 +359,12 @@ export default function Home() {
                         onChange={(e) => setPosition({ ...position, coordinates: [parseFloat(e.target.value), position.coordinates[1]] as [number, number] })}
                         className="w-full accent-spotify-neonGreen h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer"
                      />
-                     <span className="text-[10px] font-mono text-gray-400 w-8 text-right bg-black/50 px-1 py-0.5 rounded">{position.coordinates[0].toFixed(0)}°</span>
+                     <span className="text-[10px] font-mono text-gray-400 w-8 text-right bg-black/50 px-1 py-0.5 rounded-sm">{position.coordinates[0].toFixed(0)}°</span>
                  </div>
                  
                  <div className="flex items-center gap-4 w-full md:w-auto justify-end">
                     <div className="text-spotify-neonGreen font-mono font-bold text-sm text-right bg-spotify-dark/50 px-3 py-1.5 rounded-lg border border-gray-800/80">z {position.zoom.toFixed(1)}x</div>
-                    <button onClick={() => {setPosition({coordinates: [0,0], zoom: 1});}} className="text-[10px] bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 outline-none rounded-lg uppercase tracking-wider font-bold transition-colors shadow-lg">Recenter Map</button>
+                    <button onClick={() => {setPosition({coordinates: [0,0], zoom: 1});}} className="text-[10px] bg-gray-800 hover:bg-gray-700 text-white px-4 py-2.5 outline-hidden rounded-lg uppercase tracking-wider font-bold transition-colors shadow-lg">Recenter Map</button>
                  </div>
              </div>
              
@@ -369,14 +400,14 @@ export default function Home() {
             {[...data].sort((a,b) => rankSort === 'desc' ? b.vol - a.vol : a.vol - b.vol).slice(0, 27).map((metric, i) => {
               const info = CURRENCY_DICTIONARY[metric.pair];
               if (!info) return null;
-              const color = `bg-${getRiskColor(metric.vol)}`;
+              const color = RISK_BG[getRiskTone(metric.vol)];
               
               return (
               <div key={i} className="flex items-center justify-between bg-spotify-dark/50 p-3 rounded-xl border border-gray-800/50 hover:bg-gray-800/50 transition-colors">
                 <div className="flex items-center gap-3 w-1/3">
                   <span className="text-xs font-black text-gray-500 w-4">{i+1}</span>
                   <div className="relative group cursor-pointer">
-                    <div className="relative w-6 h-6 rounded-full overflow-hidden shadow-sm">
+                    <div className="relative w-6 h-6 rounded-full overflow-hidden shadow-xs">
                        <Image src={`https://flagcdn.com/w80/${info.flag}.png`} alt={metric.pair} fill className="object-cover" />
                     </div>
                     {/* Tooltip dynamically shooting right to explicitly prevent #1 list-item vertical container clipping */}
@@ -405,7 +436,7 @@ export default function Home() {
           
           <div className="flex flex-col md:flex-row items-center gap-12 bg-spotify-dark p-8 rounded-2xl border border-gray-800/50">
              {/* Donut Chart */}
-             <div className="relative w-48 h-48 rounded-full border-[16px] border-spotify-dark shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] bg-spotify-charchoal flex items-center justify-center">
+             <div className="relative w-48 h-48 rounded-full border-16 border-spotify-dark shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] bg-spotify-charchoal flex items-center justify-center">
                 <svg className="absolute inset-0 w-full h-full transform -rotate-90">
                    <circle cx="50%" cy="50%" r="40%" stroke="#1db954" strokeWidth="8" fill="none" strokeDasharray="60 40" />
                    <circle cx="50%" cy="50%" r="40%" stroke="#1890ff" strokeWidth="8" fill="none" strokeDasharray="20 80" strokeDashoffset="-60" />
@@ -422,7 +453,7 @@ export default function Home() {
                 <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
                   <div className="text-xs text-gray-500 mb-1 pointer-events-none">Uncorrelated Asset 1</div>
                   <div className="flex justify-between items-end">
-                    <select value={optA} onChange={(e) => setOptA(e.target.value)} className="font-bold text-lg text-spotify-neonGreen bg-transparent outline-none cursor-pointer appearance-none w-24">
+                    <select value={optA} onChange={(e) => setOptA(e.target.value)} className="font-bold text-lg text-spotify-neonGreen bg-transparent outline-hidden cursor-pointer appearance-none w-24">
                        {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
                     </select>
                     <span className="font-mono text-xl pointer-events-none">45.0%</span>
@@ -431,7 +462,7 @@ export default function Home() {
                 <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
                   <div className="text-xs text-gray-500 mb-1 pointer-events-none">Uncorrelated Asset 2</div>
                   <div className="flex justify-between items-end">
-                    <select value={optB} onChange={(e) => setOptB(e.target.value)} className="font-bold text-lg text-spotify-electricBlue bg-transparent outline-none cursor-pointer appearance-none w-24">
+                    <select value={optB} onChange={(e) => setOptB(e.target.value)} className="font-bold text-lg text-spotify-electricBlue bg-transparent outline-hidden cursor-pointer appearance-none w-24">
                        {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
                     </select>
                     <span className="font-mono text-xl pointer-events-none">30.0%</span>
@@ -440,7 +471,7 @@ export default function Home() {
                 <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
                   <div className="text-xs text-gray-500 mb-1 pointer-events-none">Diversifier (Constraint)</div>
                   <div className="flex justify-between items-end">
-                    <select value={optC} onChange={(e) => setOptC(e.target.value)} className="font-bold text-lg text-gray-300 bg-transparent outline-none cursor-pointer appearance-none w-24">
+                    <select value={optC} onChange={(e) => setOptC(e.target.value)} className="font-bold text-lg text-gray-300 bg-transparent outline-hidden cursor-pointer appearance-none w-24">
                        {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
                     </select>
                     <span className="font-mono text-xl pointer-events-none">5.0%</span>
@@ -449,7 +480,7 @@ export default function Home() {
                 <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
                   <div className="text-xs text-gray-500 mb-1 pointer-events-none">Diversifier (Constraint)</div>
                   <div className="flex justify-between items-end">
-                    <select value={optD} onChange={(e) => setOptD(e.target.value)} className="font-bold text-lg text-white bg-transparent outline-none cursor-pointer appearance-none w-24">
+                    <select value={optD} onChange={(e) => setOptD(e.target.value)} className="font-bold text-lg text-white bg-transparent outline-hidden cursor-pointer appearance-none w-24">
                        {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
                     </select>
                     <span className="font-mono text-xl pointer-events-none">20.0%</span>
@@ -464,21 +495,21 @@ export default function Home() {
           <div>
             <h2 className="text-xl font-bold mb-6 tracking-tight">Correlation Quick-Check</h2>
             <div className="flex justify-between items-center bg-spotify-dark p-2 rounded-xl mb-6 border border-gray-700 w-full relative">
-               <select className="bg-transparent text-white font-bold p-3 outline-none flex-1 appearance-none cursor-pointer"
+               <select className="bg-transparent text-white font-bold p-3 outline-hidden flex-1 appearance-none cursor-pointer"
                        value={qcCurrencyA} onChange={(e) => setQcCurrencyA(e.target.value)}>
                  {Object.keys(CURRENCY_DICTIONARY).map(c => <option key={c} value={c}>{c}</option>)}
                </select>
                <span className="text-gray-500 text-lg mr-2 font-black pointer-events-none">↔</span>
-               <select className="bg-transparent text-white font-bold p-3 outline-none flex-1 appearance-none cursor-pointer text-right" 
+               <select className="bg-transparent text-white font-bold p-3 outline-hidden flex-1 appearance-none cursor-pointer text-right" 
                        value={qcCurrencyB} onChange={(e) => setQcCurrencyB(e.target.value)}>
                  {Object.keys(CURRENCY_DICTIONARY).map(c => <option key={c} value={c}>{c}</option>)}
                </select>
             </div>
             
-            <div className={`bg-[#0a0a0a] rounded-2xl p-6 text-center border-2 border-${qcColor} shadow-[0_0_20px_currentColor] mt-auto`}>
+            <div className={`bg-[#0a0a0a] rounded-2xl p-6 text-center border-2 ${RISK_BORDER[qcTone]} shadow-[0_0_20px_currentColor] mt-auto`}>
                <div className="text-sm text-gray-400 font-bold uppercase tracking-widest mb-1">Pearson Score (r)</div>
-               <div className={`text-5xl font-black text-${qcColor} font-mono mb-2`}>{qcScore}</div>
-               <div className={`text-${qcColor} bg-${qcColor}/10 inline-block px-3 py-1 rounded-full text-xs font-bold border border-${qcColor}/50`}>
+               <div className={`text-5xl font-black ${RISK_TEXT[qcTone]} font-mono mb-2`}>{qcScore}</div>
+               <div className={`${RISK_TEXT[qcTone]} ${RISK_BG_SOFT[qcTone]} inline-block px-3 py-1 rounded-full text-xs font-bold border ${RISK_BORDER_SOFT[qcTone]}`}>
                  {Math.abs(qcScore) < 0.3 ? 'LOW RISK SHIELD' : (Math.abs(qcScore) <= 0.7 ? 'MODERATE LINK' : 'HEAVY CORRELATION')}
                </div>
             </div>

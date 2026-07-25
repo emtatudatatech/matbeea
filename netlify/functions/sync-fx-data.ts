@@ -13,7 +13,7 @@ export const CURRENCY_PAIRS = [
   'AUDUSD=X', 'NZDUSD=X', 'FJDUSD=X', 'PGKUSD=X', 'WSTUSD=X'
 ];
 
-export default async (req: Request) => {
+const syncFxData = async () => {
   try {
     const startDate = new Date('2024-01-01');
     const endDate = new Date();
@@ -64,9 +64,11 @@ export default async (req: Request) => {
     });
   } catch (error) {
     console.error("Master Sync failed", error);
-    return new Response(JSON.stringify({ error: "Sync failed" }), { 
-      status: 500, 
-      headers: { 'Content-Type': 'application/json' } 
+    return new Response(JSON.stringify({ error: "Sync failed" }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
     });
   }
 };
+
+export default syncFxData;
