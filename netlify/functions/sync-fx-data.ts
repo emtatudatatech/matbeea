@@ -2,7 +2,8 @@ import prisma from '../../prisma/client';
 import YahooFinance from 'yahoo-finance2';
 const yahooFinance = new YahooFinance();
 
-// 27 Major Global Currencies list against USD mapping loosely to regional pairs
+// 38 currency pairs quoted against USD, covering the 39 currencies in the
+// dashboard's universe (the USD base itself is not a pair).
 export const CURRENCY_PAIRS = [
   'ZARUSD=X', 'NGNUSD=X', 'EGPUSD=X', 'KESUSD=X', 'ZMWUSD=X', 'MADUSD=X',
   'JPYUSD=X', 'CNYUSD=X', 'INRUSD=X', 'HKDUSD=X', 'KRWUSD=X',
@@ -13,7 +14,7 @@ export const CURRENCY_PAIRS = [
   'AUDUSD=X', 'NZDUSD=X', 'FJDUSD=X', 'PGKUSD=X', 'WSTUSD=X'
 ];
 
-export default async (req: Request) => {
+const syncFxData = async () => {
   try {
     const startDate = new Date('2024-01-01');
     const endDate = new Date();
@@ -64,9 +65,11 @@ export default async (req: Request) => {
     });
   } catch (error) {
     console.error("Master Sync failed", error);
-    return new Response(JSON.stringify({ error: "Sync failed" }), { 
-      status: 500, 
-      headers: { 'Content-Type': 'application/json' } 
+    return new Response(JSON.stringify({ error: "Sync failed" }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
     });
   }
 };
+
+export default syncFxData;

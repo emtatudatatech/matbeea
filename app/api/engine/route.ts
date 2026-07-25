@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import prisma from '@/prisma/client';
 import { sampleCorrelation, standardDeviation } from 'simple-statistics';
 
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
     const endStr = searchParams.get('end');
     
     // Construct Prisma dynamic where constraints based on calendar parameters
-    const whereClause: any = {};
+    const whereClause: Prisma.FxDailyPriceWhereInput = {};
     if (startStr && endStr) {
        whereClause.date = {
           gte: new Date(startStr),
@@ -83,31 +84,70 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Insufficient aligned data for correlation.' }, { status: 400 });
     }
 
+    // Daily simple returns, computed once and reused for both volatility and correlation.
+    // Correlation must be measured on returns rather than price levels: two currencies
+    // that merely drift in the same direction produce a near-1 correlation on levels
+    // while their day-to-day risk may be unrelated, and portfolio variance depends on
+    // the co-movement of returns.
+    const returnsByPair: Record<string, number[]> = {};
+    pairNames.forEach(pair => {
+      const prices = alignedData[pair];
+      const returns: number[] = [];
+      for (let i = 1; i < prices.length; i++) {
+        const previous = prices[i - 1];
+        returns.push(previous === 0 ? 0 : (prices[i] - previous) / previous);
+      }
+      returnsByPair[pair] = returns;
+    });
+
     // Compute Volatility (Risk)
     const riskRankings = pairNames.map(pair => {
-      const prices = alignedData[pair];
-      const returns = [];
-      for (let i = 1; i < prices.length; i++) {
-        returns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
-      }
-      const dailyVolatility = standardDeviation(returns);
+      const returns = returnsByPair[pair];
+      const dailyVolatility = returns.length > 1 ? standardDeviation(returns) : 0;
       const annualizedVolatility = dailyVolatility * Math.sqrt(252);
       return { pair, volatility: annualizedVolatility };
     }).sort((a, b) => b.volatility - a.volatility);
 
-    // Compute Math Engine Pearson Matrix for a few core pairs against the selected Base (simplified for fast API)
+    const safeCorrelation = (a: number[], b: number[]): number => {
+      // sampleCorrelation throws on short input and returns NaN for a flat series
+      // (a hard-pegged currency), both of which we degrade to "no relationship".
+      if (a.length !== b.length || a.length < 2) return 0;
+      try {
+        const r = sampleCorrelation(a, b);
+        return Number.isFinite(r) ? r : 0;
+      } catch {
+        return 0;
+      }
+    };
+
+    // Full pairwise Pearson matrix. The portfolio optimizer needs corr(i, j) between
+    // arbitrary holdings — not just each currency against the base — to compute a
+    // genuine portfolio variance, so the matrix is built once here rather than in the UI.
+    const correlationMatrix: Record<string, Record<string, number>> = {};
+    pairNames.forEach(pair => { correlationMatrix[pair] = {}; });
+
+    for (let i = 0; i < pairNames.length; i++) {
+      const a = pairNames[i];
+      correlationMatrix[a][a] = 1;
+      for (let j = i + 1; j < pairNames.length; j++) {
+        const b = pairNames[j];
+        // Kept at 6dp: coarser rounding can nudge the matrix out of positive
+        // semi-definiteness, which would let the optimizer report an impossible
+        // near-zero variance.
+        const r = Number(safeCorrelation(returnsByPair[a], returnsByPair[b]).toFixed(6));
+        correlationMatrix[a][b] = r;
+        correlationMatrix[b][a] = r;
+      }
+    }
+
+    // Correlations against the selected base, read straight off the matrix.
     const basePair = base === 'USD' ? 'EURUSD=X' : `${base}USD=X`; // simplified base matching logic
     const correlations: Record<string, number> = {};
-    
-    if (alignedData[basePair]) {
+
+    if (correlationMatrix[basePair]) {
       pairNames.forEach(pair => {
         if (pair !== basePair) {
-          try {
-             const r = sampleCorrelation(alignedData[basePair], alignedData[pair]);
-             correlations[pair] = Number.isNaN(r) ? 0 : r;
-          } catch (e) {
-             correlations[pair] = 0; // fallback gracefully
-          }
+          correlations[pair] = correlationMatrix[basePair][pair];
         }
       });
     }
@@ -115,6 +155,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       riskRankings,
       correlations,
+      correlationMatrix,
       validDaysUsed: validDaysUsed,
       baseCurrency: base
     });

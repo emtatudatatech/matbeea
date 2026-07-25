@@ -1,6 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import 'dotenv/config';
+import prisma from './prisma/client';
 
 async function check() {
   const allData = await prisma.fxDailyPrice.findMany({
