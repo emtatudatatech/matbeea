@@ -1,6 +1,5 @@
 "use client";
 
-import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { geoEqualEarth, geoPath, type GeoPermissibleObjects } from 'd3-geo';
 import { select } from 'd3-selection';
@@ -18,6 +17,16 @@ const VIEW_HEIGHT = 470;
 
 const MARKER_RADIUS = 14;
 const MARKER_HIT_RADIUS = 20;
+/** Flag disc sits just inside the coloured risk ring, leaving a thin bezel. */
+const FLAG_RADIUS = MARKER_RADIUS - 1;
+const FLAG_CLIP_ID = 'world-map-flag-clip';
+
+/**
+ * Flags come from flagcdn.com, which is flagpedia.net's image CDN — the endpoint
+ * flagpedia publishes for hotlinking. `w80` is 80px wide, comfortably sharp for a
+ * 24px marker on a 2x display while staying well under a kilobyte per flag.
+ */
+const flagUrl = (code: string) => `https://flagcdn.com/w80/${code}.png`;
 const TOOLTIP_WIDTH = 190;
 /** Below this y (in view units) a tooltip would be clipped, so it flips underneath. */
 const TOOLTIP_FLIP_THRESHOLD = 120;
@@ -235,6 +244,15 @@ export default function WorldMap({ metrics, baseCurrency, statusLabel }: Props) 
           role="img"
           aria-label={`World map of currency volatility and correlation against ${baseCurrency}`}
         >
+          <defs>
+            {/* userSpaceOnUse (the default) resolves against the user space of the
+                element referencing it, so this one circle clips every marker's flag
+                correctly despite each marker sitting in its own translated group. */}
+            <clipPath id={FLAG_CLIP_ID}>
+              <circle cx={0} cy={0} r={FLAG_RADIUS} />
+            </clipPath>
+          </defs>
+
           <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
             <path d={spherePath} fill="var(--map-ocean)" stroke="var(--map-border)" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />
             {countryPaths.map(country => (
@@ -279,23 +297,20 @@ export default function WorldMap({ metrics, baseCurrency, statusLabel }: Props) 
                     strokeWidth={isActive ? 3 : 2}
                     className="transition-all duration-150"
                   />
-                  <foreignObject
-                    x={-MARKER_RADIUS + 2}
-                    y={-MARKER_RADIUS + 2}
-                    width={(MARKER_RADIUS - 2) * 2}
-                    height={(MARKER_RADIUS - 2) * 2}
+                  {/* A native SVG <image> rather than next/image in a foreignObject:
+                      the latter emits a lazy-loaded, absolutely-positioned <img>,
+                      and inside foreignObject the browser cannot resolve its box to
+                      decide it is visible, so the flag never loads. */}
+                  <image
+                    href={flagUrl(info.flag)}
+                    x={-FLAG_RADIUS}
+                    y={-FLAG_RADIUS}
+                    width={FLAG_RADIUS * 2}
+                    height={FLAG_RADIUS * 2}
+                    clipPath={`url(#${FLAG_CLIP_ID})`}
+                    preserveAspectRatio="xMidYMid slice"
                     className="pointer-events-none"
-                  >
-                    <div className="relative w-full h-full rounded-full overflow-hidden">
-                      <Image
-                        src={`https://flagcdn.com/w80/${info.flag}.png`}
-                        alt=""
-                        fill
-                        sizes="32px"
-                        className="object-cover"
-                      />
-                    </div>
-                  </foreignObject>
+                  />
                 </g>
               );
             })}
