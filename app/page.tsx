@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useState, useEffect, useMemo } from 'react';
 import WorldMap from './components/WorldMap';
 import ThemeToggle from './components/ThemeToggle';
+import CorrelationHeatmap from './components/CorrelationHeatmap';
 import { lowestRiskAllocation, minimumVarianceAllocation, type AssetStats } from '@/lib/portfolio';
 import {
   CURRENCY_DICTIONARY,
@@ -218,6 +219,7 @@ export default function Home() {
         <nav className="hidden xl:flex gap-8 text-sm font-bold text-ink-muted">
           <a href="#map" className="hover:text-ink transition-colors uppercase tracking-wider">Global Map</a>
           <a href="#rankings" className="hover:text-ink transition-colors uppercase tracking-wider">Risk Rankings</a>
+          <a href="#matrix" className="hover:text-ink transition-colors uppercase tracking-wider">Matrix</a>
           <a href="#optimizer" className="hover:text-ink transition-colors uppercase tracking-wider">Optimizer</a>
           <a href="#quickcheck" className="hover:text-ink transition-colors uppercase tracking-wider">Pair Analysis</a>
         </nav>
@@ -311,6 +313,11 @@ export default function Home() {
               </div>
             )})}
           </div>
+        </section>
+
+        {/* Correlation Matrix Heat-map */}
+        <section className="xl:col-span-3 bg-surface-raised rounded-3xl p-8 shadow-lg border border-edge" id="matrix">
+          <CorrelationHeatmap codes={optimizerUniverse} correlations={dataset.correlations} />
         </section>
 
         {/* Portfolio Optimizer */}

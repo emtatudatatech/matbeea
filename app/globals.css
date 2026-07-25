@@ -56,6 +56,19 @@
   --holding-2: #eb6834;
   --holding-3: #1baf7a;
   --holding-4: #eda100;
+
+  /* Diverging scale for the correlation matrix. Correlation is polarity data —
+     which side of zero — so it takes two hues around a neutral midpoint, never a
+     sequential ramp or a rainbow. Blue and red are used because they read as
+     opposites and stay separable under colour-vision deficiency. Magnitude
+     darkens outward from the neutral here; each arm is lightness-monotone. */
+  --corr-neg-3: #2a78d6;
+  --corr-neg-2: #6aa3e0;
+  --corr-neg-1: #bcd6f2;
+  --corr-zero: #ebe9e4;
+  --corr-pos-1: #f5c4c3;
+  --corr-pos-2: #e2807e;
+  --corr-pos-3: #c62f2e;
 }
 
 /* Dark theme — its own steps, not an inversion of the light values. */
@@ -88,6 +101,18 @@
   --holding-2: #d95926;
   --holding-3: #199e70;
   --holding-4: #c98500;
+
+  /* Same diverging scale re-stepped for the dark surface: magnitude brightens
+     outward from a dark neutral instead of darkening. The inner steps are held
+     at low chroma deliberately — a saturated dark red at near-neutral lightness
+     makes a weak 0.2 correlation shout as loudly as a strong one. */
+  --corr-neg-3: #6fb0f5;
+  --corr-neg-2: #3a72b4;
+  --corr-neg-1: #3d556f;
+  --corr-zero: #383835;
+  --corr-pos-1: #6b4340;
+  --corr-pos-2: #a8514e;
+  --corr-pos-3: #ef8a86;
 }
 
 /* Tailwind v4 defaults borders to currentcolor; anchoring them to the theme edge
