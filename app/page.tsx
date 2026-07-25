@@ -1,8 +1,9 @@
 "use client";
 
 import Image from 'next/image';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
+import { lowestRiskAllocation, minimumVarianceAllocation, type AssetStats } from '@/lib/portfolio';
 
 // TopoJSON definition for the D3 Map implementation
 const geoUrl = "https://unpkg.com/world-atlas@2.0.2/countries-110m.json";
@@ -110,6 +111,68 @@ type GeographyFeature = {
   [key: string]: unknown;
 };
 
+/** Number of currencies the optimizer allocates across. */
+const HOLDING_SLOTS = 4;
+
+// Categorical identity colours for the optimizer holdings. Deliberately separate
+// from the green/blue/red risk palette so a donut arc never reads as a risk
+// verdict. Validated against the #181818 chart surface for lightness band, chroma
+// floor, colour-vision-deficiency separation and contrast.
+const HOLDING_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
+
+const cleanPairCode = (pair: string) => pair.replace('USD=X', '').replace('=X', '');
+
+// Deterministic stand-in correlations, so the optimizer stays usable and stable
+// when the database is empty. Mirrors the shape of the real matrix.
+//
+// Each currency gets a unit vector of synthetic factor exposures and correlation
+// is their dot product. That makes the matrix a Gram matrix, so it is positive
+// semi-definite like a real correlation matrix — simply picking symmetric numbers
+// would not be, and an indefinite covariance matrix lets the optimizer "hedge"
+// its way to an impossible zero-risk portfolio.
+//
+// With more currencies than factors that Gram matrix is only semi-definite, so it
+// is shrunk toward the identity. That keeps every eigenvalue comfortably above
+// zero (and survives rounding) while leaving the diagonal at exactly 1.
+const MOCK_FACTORS = 5;
+const MOCK_SHRINKAGE = 0.7;
+
+const generateMockCorrelations = (codes: string[]) => {
+  const exposures = codes.map((_, i) => {
+    const raw = Array.from({ length: MOCK_FACTORS }, (_, k) => Math.sin((i + 1) * (k + 1) * 1.7));
+    const norm = Math.hypot(...raw) || 1;
+    return raw.map(value => value / norm);
+  });
+
+  const matrix: Record<string, Record<string, number>> = {};
+  codes.forEach(code => { matrix[code] = {}; });
+  codes.forEach((a, i) => {
+    matrix[a][a] = 1;
+    for (let j = i + 1; j < codes.length; j++) {
+      const b = codes[j];
+      const dot = exposures[i].reduce((sum, value, k) => sum + value * exposures[j][k], 0);
+      const r = Number((MOCK_SHRINKAGE * dot).toFixed(4));
+      matrix[a][b] = r;
+      matrix[b][a] = r;
+    }
+  });
+  return matrix;
+};
+
+// Dynamic mocked generation so we always view 38 plots visually regardless of DB pipeline delay
+const buildMockDataset = (base: string) => {
+  const rows = Object.keys(CURRENCY_DICTIONARY)
+    .filter(cur => cur !== base)
+    .map((cur, i) => ({
+      pair: cur,
+      vol: Number(((i % 15) + 4.5).toFixed(1)), // Deterministic Volatility: 4.5 to 18.5
+      r: Number(((i % 5) * 0.4 - 0.8).toFixed(2)) // Deterministic Pearson: -0.8 to 0.8
+    }))
+    .sort((a, b) => b.vol - a.vol);
+
+  return { rows, correlations: generateMockCorrelations(rows.map(row => row.pair)) };
+};
+
 export default function Home() {
   const currentYear = new Date().getFullYear().toString();
   const today = new Date();
@@ -121,12 +184,10 @@ export default function Home() {
   const [baseCurrency, setBaseCurrency] = useState('USD');
   const [dbStatus, setDbStatus] = useState('Loading...');
   
-  // Interactive Optimizer States
-  const [optA, setOptA] = useState('JPY');
-  const [optB, setOptB] = useState('CHF');
-  const [optC, setOptC] = useState('USD');
-  const [optD, setOptD] = useState('GBP');
-  
+  // Interactive Optimizer selection. `null` means "follow the computed lowest-risk
+  // default"; once the user picks a currency their choice survives date/base changes.
+  const [selection, setSelection] = useState<string[] | null>(null);
+
   // UI States
   const [rankSort, setRankSort] = useState<'desc' | 'asc'>('desc');
   
@@ -154,18 +215,8 @@ export default function Home() {
      setPosition(position);
   };
   
-  // Dynamic mocked generation so we always view 38 plots visually regardless of DB pipeline delay
-  const generateMockData = (base: string) => {
-    return Object.keys(CURRENCY_DICTIONARY)
-      .filter(cur => cur !== base)
-      .map((cur, i) => ({
-        pair: cur,
-        vol: Number(((i % 15) + 4.5).toFixed(1)), // Deterministic Volatility: 4.5 to 18.5
-        r: Number(((i % 5) * 0.4 - 0.8).toFixed(2)) // Deterministic Pearson: -0.8 to 0.8
-      })).sort((a, b) => b.vol - a.vol);
-  };
-  
-  const [data, setData] = useState(generateMockData('USD'));
+  const [dataset, setDataset] = useState(() => buildMockDataset('USD'));
+  const data = dataset.rows;
 
   useEffect(() => {
     // Attempt to pull real data from standard API we created
@@ -174,25 +225,91 @@ export default function Home() {
        .then(res => {
          if (res.error) {
            setDbStatus('Local DB Empty - Showing Generated Plot');
-           setData(generateMockData(baseCurrency));
+           setDataset(buildMockDataset(baseCurrency));
          } else {
            setDbStatus('● LIVE from Neon Postgres');
            // Convert actual API to visual array map
-           const mapped = res.riskRankings.map((r: EngineRanking) => {
-              const cleanedPair = r.pair.replace('USD=X', '').replace('=X', '');
-              return {
-                 pair: cleanedPair,
-                 vol: Number((r.volatility * 100).toFixed(1)),
-                 r: res.correlations[r.pair] ? Number(res.correlations[r.pair].toFixed(2)) : 0
-              }
+           const rows = res.riskRankings.map((r: EngineRanking) => ({
+              pair: cleanPairCode(r.pair),
+              vol: Number((r.volatility * 100).toFixed(1)),
+              r: res.correlations[r.pair] ? Number(res.correlations[r.pair].toFixed(2)) : 0
+           }));
+
+           // Re-key the matrix from Yahoo tickers to the plain codes the UI uses.
+           const rawMatrix: Record<string, Record<string, number>> = res.correlationMatrix ?? {};
+           const correlations: Record<string, Record<string, number>> = {};
+           Object.keys(rawMatrix).forEach(pair => {
+              const row: Record<string, number> = {};
+              Object.keys(rawMatrix[pair]).forEach(other => {
+                 row[cleanPairCode(other)] = rawMatrix[pair][other];
+              });
+              correlations[cleanPairCode(pair)] = row;
            });
-           setData(mapped);
+
+           setDataset({ rows, correlations });
          }
        }).catch(() => {
          setDbStatus('Local DB Error - Showing Generated Plot');
-         setData(generateMockData(baseCurrency));
+         setDataset(buildMockDataset(baseCurrency));
        });
   }, [baseCurrency, dateStart, dateEnd]);
+
+  // --- Portfolio optimizer -------------------------------------------------
+  // Volatilities stay in percentage points, so the resulting portfolio
+  // volatility comes back in the same unit.
+  const optimizerStats = useMemo<AssetStats>(() => {
+    const volatility: Record<string, number> = {};
+    dataset.rows.forEach(row => { volatility[row.pair] = row.vol; });
+    return { volatility, correlation: dataset.correlations };
+  }, [dataset]);
+
+  const optimizerUniverse = useMemo(
+    () => dataset.rows.map(row => row.pair).sort((a, b) => a.localeCompare(b)),
+    [dataset]
+  );
+
+  const lowestRisk = useMemo(
+    () => lowestRiskAllocation(optimizerUniverse, optimizerStats, HOLDING_SLOTS),
+    [optimizerUniverse, optimizerStats]
+  );
+
+  // A stored selection goes stale when a currency drops out of the dataset (a
+  // narrower date range can push it under the engine's minimum sample size).
+  // Unknown codes have no volatility and would masquerade as risk-free, so they
+  // are dropped and backfilled from the computed default.
+  const holdings = useMemo(() => {
+    if (!selection) return lowestRisk.codes;
+    const valid = selection.filter(code => optimizerUniverse.includes(code));
+    const filler = lowestRisk.codes.filter(code => !valid.includes(code));
+    return [...valid, ...filler].slice(0, HOLDING_SLOTS);
+  }, [selection, lowestRisk, optimizerUniverse]);
+
+  const allocation = useMemo(
+    () => minimumVarianceAllocation(holdings, optimizerStats),
+    [holdings, optimizerStats]
+  );
+
+  const handleHoldingChange = (slot: number, code: string) => {
+    const next = [...holdings];
+    next[slot] = code;
+    setSelection(next);
+  };
+
+  // Donut geometry. pathLength normalises the circumference to 100 so a dash
+  // length is simply the weight in percent; the gap keeps arcs visually separate.
+  const donutSegments = useMemo(() => {
+    const SEGMENT_GAP = 1.2;
+    const shares = allocation.weights.map(weight => weight * 100);
+    return allocation.codes
+      .map((code, index) => ({
+        code,
+        color: HOLDING_COLORS[index % HOLDING_COLORS.length],
+        dash: Math.max(0, shares[index] - SEGMENT_GAP),
+        // Where the arc starts: the cumulative share of everything before it.
+        offset: shares.slice(0, index).reduce((sum, share) => sum + share, 0),
+      }))
+      .filter(segment => segment.dash > 0);
+  }, [allocation]);
 
   const getRiskTone = (volatility: number, isCorrelation: boolean = false): RiskTone => {
     if (isCorrelation) {
@@ -431,63 +548,96 @@ export default function Home() {
 
         {/* Portfolio Optimizer */}
         <section className="xl:col-span-2 bg-spotify-charchoal rounded-3xl p-8 shadow-2xl border border-gray-800" id="optimizer">
-          <h2 className="text-xl font-bold mb-2 tracking-tight">Portfolio Variance Optimizer</h2>
-          <p className="text-gray-400 text-sm mb-6 max-w-2xl">Minimum variance portfolio combinations yielding the lowest overall correlation. Strict weighting constraints applied: Max 5% USD/GBP.</p>
-          
+          <div className="flex flex-wrap justify-between items-start gap-3 mb-2">
+            <h2 className="text-xl font-bold tracking-tight">Portfolio Variance Optimizer</h2>
+            <button
+              onClick={() => setSelection(null)}
+              disabled={selection === null}
+              className="text-[10px] font-bold text-gray-400 bg-black/40 hover:bg-gray-800 hover:text-white px-3 py-2 rounded-lg uppercase tracking-wider transition-colors border border-gray-800 shadow-md disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-black/40 disabled:hover:text-gray-400"
+            >
+              Reset to lowest risk
+            </button>
+          </div>
+          <p className="text-gray-400 text-sm mb-6 max-w-2xl">
+            Weights are the long-only minimum-variance solution for whichever four currencies you
+            hold, computed from their annualized volatility and the correlations between them —
+            change a holding and every weight re-solves. The starting selection is the lowest-risk
+            combination found across all {optimizerUniverse.length} currencies.
+          </p>
+
+          {allocation.codes.length === 0 ? (
+            <div className="bg-spotify-dark p-8 rounded-2xl border border-gray-800/50 text-center text-sm text-gray-500">
+              Waiting for market data before the optimizer can solve.
+            </div>
+          ) : (
           <div className="flex flex-col md:flex-row items-center gap-12 bg-spotify-dark p-8 rounded-2xl border border-gray-800/50">
-             {/* Donut Chart */}
-             <div className="relative w-48 h-48 rounded-full border-16 border-spotify-dark shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] bg-spotify-charchoal flex items-center justify-center">
-                <svg className="absolute inset-0 w-full h-full transform -rotate-90">
-                   <circle cx="50%" cy="50%" r="40%" stroke="#1db954" strokeWidth="8" fill="none" strokeDasharray="60 40" />
-                   <circle cx="50%" cy="50%" r="40%" stroke="#1890ff" strokeWidth="8" fill="none" strokeDasharray="20 80" strokeDashoffset="-60" />
-                   <circle cx="50%" cy="50%" r="40%" stroke="#ff4d4f" strokeWidth="8" fill="none" strokeDasharray="10 90" strokeDashoffset="-80" />
+             {/* Donut Chart — part-to-whole of the allocation, at a glance; the exact
+                 figures live on the labelled cards beside it. */}
+             <div className="relative w-48 h-48 shrink-0 rounded-full border-16 border-spotify-dark shadow-[inset_0_0_20px_rgba(0,0,0,0.5)] bg-spotify-charchoal flex items-center justify-center">
+                <svg className="absolute inset-0 w-full h-full -rotate-90" aria-hidden="true">
+                   {donutSegments.map(segment => (
+                     <circle
+                       key={segment.code}
+                       cx="50%"
+                       cy="50%"
+                       r="40%"
+                       pathLength={100}
+                       stroke={segment.color}
+                       strokeWidth="8"
+                       fill="none"
+                       strokeDasharray={`${segment.dash} ${100 - segment.dash}`}
+                       strokeDashoffset={-segment.offset}
+                     />
+                   ))}
                 </svg>
                 <div className="text-center">
                   <div className="text-xs text-gray-500 uppercase font-bold tracking-widest">Global Risk</div>
-                  <div className="text-3xl font-black text-white">{((data.find(d => d.pair === optA)?.vol || 0) * 0.45 + (data.find(d => d.pair === optB)?.vol || 0) * 0.3 + (data.find(d => d.pair === optC)?.vol || 0) * 0.05 + (data.find(d => d.pair === optD)?.vol || 0) * 0.2).toFixed(1)}%</div>
+                  <div className="text-3xl font-black text-white">{allocation.volatility.toFixed(1)}%</div>
+                  <div className="text-[10px] text-gray-500 font-medium">annualized &sigma;</div>
                 </div>
              </div>
-             
-             {/* Weightings */}
-             <div className="flex-1 w-full grid grid-cols-2 gap-4">
-                <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
-                  <div className="text-xs text-gray-500 mb-1 pointer-events-none">Uncorrelated Asset 1</div>
-                  <div className="flex justify-between items-end">
-                    <select value={optA} onChange={(e) => setOptA(e.target.value)} className="font-bold text-lg text-spotify-neonGreen bg-transparent outline-hidden cursor-pointer appearance-none w-24">
-                       {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
-                    </select>
-                    <span className="font-mono text-xl pointer-events-none">45.0%</span>
-                  </div>
-                </div>
-                <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
-                  <div className="text-xs text-gray-500 mb-1 pointer-events-none">Uncorrelated Asset 2</div>
-                  <div className="flex justify-between items-end">
-                    <select value={optB} onChange={(e) => setOptB(e.target.value)} className="font-bold text-lg text-spotify-electricBlue bg-transparent outline-hidden cursor-pointer appearance-none w-24">
-                       {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
-                    </select>
-                    <span className="font-mono text-xl pointer-events-none">30.0%</span>
-                  </div>
-                </div>
-                <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
-                  <div className="text-xs text-gray-500 mb-1 pointer-events-none">Diversifier (Constraint)</div>
-                  <div className="flex justify-between items-end">
-                    <select value={optC} onChange={(e) => setOptC(e.target.value)} className="font-bold text-lg text-gray-300 bg-transparent outline-hidden cursor-pointer appearance-none w-24">
-                       {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
-                    </select>
-                    <span className="font-mono text-xl pointer-events-none">5.0%</span>
-                  </div>
-                </div>
-                <div className="bg-black/40 p-4 rounded-xl border border-gray-800 relative hover:border-gray-500 transition-colors">
-                  <div className="text-xs text-gray-500 mb-1 pointer-events-none">Diversifier (Constraint)</div>
-                  <div className="flex justify-between items-end">
-                    <select value={optD} onChange={(e) => setOptD(e.target.value)} className="font-bold text-lg text-white bg-transparent outline-hidden cursor-pointer appearance-none w-24">
-                       {Object.keys(CURRENCY_DICTIONARY).sort().map(c => <option key={c} value={c} className="bg-spotify-dark text-white">{c}</option>)}
-                    </select>
-                    <span className="font-mono text-xl pointer-events-none">20.0%</span>
-                  </div>
-                </div>
+
+             {/* Weightings — each card is both the control and the legend entry. */}
+             <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {allocation.codes.map((code, index) => {
+                  const info = CURRENCY_DICTIONARY[code];
+                  return (
+                    <div key={index} className="bg-black/40 p-4 rounded-xl border border-gray-800 hover:border-gray-500 transition-colors">
+                      <div className="flex items-center gap-2 mb-1 min-w-0">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: HOLDING_COLORS[index % HOLDING_COLORS.length] }}
+                        />
+                        <span className="text-xs text-gray-500 truncate">
+                          Holding {index + 1}{info ? ` · ${info.name}` : ''}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-end gap-2">
+                        <select
+                          value={code}
+                          aria-label={`Holding ${index + 1} currency`}
+                          onChange={(e) => handleHoldingChange(index, e.target.value)}
+                          className="font-bold text-lg text-white bg-transparent outline-hidden cursor-pointer appearance-none w-24"
+                        >
+                          {optimizerUniverse.map(option => (
+                            <option
+                              key={option}
+                              value={option}
+                              disabled={option !== code && holdings.includes(option)}
+                              className="bg-spotify-dark text-white"
+                            >
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="font-mono text-xl text-white">{(allocation.weights[index] * 100).toFixed(1)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
              </div>
           </div>
+          )}
         </section>
 
         {/* Pair Quick Check */}

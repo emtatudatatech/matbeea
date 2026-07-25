@@ -8,7 +8,8 @@ A secure, high-performance Full-Stack Application built with **Next.js (App Rout
 - **Serverless PostgreSQL**: Hosted on [Neon.tech](https://neon.tech/) scaling-to-zero when unvisited while remaining natively type-synced through Prisma ORM with defensive `createMany` bulk-batching to respect edge execution limits.
 - **Headless Ingestion Pipeline**: Integrates a `netlify.toml` specified cron job to pull deep time-series snapshots (Back into Q1 2024 at minimum) seamlessly via `yahoo-finance2.chart()` architecture.
 - **Real-Time LOCF Mathematical Engine**: Computes daily correlation vectors dynamically via `simple-statistics`, bridging misaligned global market holidays automatically strictly utilizing algorithmic Last-Observation-Carried-Forward (LOCF) alignment strategies.
-- **Dynamic Interaction Modules**: Engineered with high-contrast UI layers overlaying interactive Native dropdown asset-selection logic to manually mock complex Portfolio Variances dynamically over a live localized Timeline Filter component.
+- **Dynamic Interaction Modules**: Engineered with high-contrast UI layers overlaying interactive Native dropdown asset-selection logic over a live localized Timeline Filter component.
+- **Minimum-Variance Portfolio Optimizer**: Pick any four currencies and the allocation is *solved*, not assumed — weights are the exact long-only minimum-variance solution built from annualized volatility and the full pairwise correlation matrix, so every weight and the headline risk figure re-solve on each change. The dashboard opens on the lowest-risk combination found across the entire currency universe. Solver lives in [`lib/portfolio.ts`](lib/portfolio.ts).
 
 ## Architecture
 
