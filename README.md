@@ -21,6 +21,19 @@ A secure, high-performance Full-Stack Application built with **Next.js (App Rout
 - **Geographic Mapping**: `d3-geo` + `d3-zoom` + `topojson-client` (Equal Earth projection)
 - **Theming**: Light/dark via semantic CSS custom properties, with a persisted in-app toggle
 
+### Map Markers & Flags
+
+Country flags come from [flagpedia](https://flagpedia.net) via its image CDN, `flagcdn.com`
+(`/w80/{iso-alpha-2}.png` — 80px wide, comfortably sharp for a 26px marker on a 2x display).
+
+They are drawn as native SVG `<image>` elements clipped to a circle, **not** as `next/image` inside a
+`<foreignObject>`. The latter emits a lazy-loaded, absolutely-positioned `<img>`, and inside a
+`foreignObject` the browser cannot resolve that element's box well enough to decide it is on screen —
+so the flags never loaded and the markers rendered as empty discs. A single `clipPath` serves every
+marker: `clipPathUnits` defaults to `userSpaceOnUse`, which resolves against the user space of the
+element referencing it, so one circle at the origin clips correctly inside each marker's own
+translated group.
+
 ### Theming
 
 The UI is driven by semantic tokens (`surface`, `ink`, `edge`, `risk-*`, `holding-*`) declared in
